@@ -1,0 +1,52 @@
+Chord Progression Studio - Version 2.0
+=======================================
+
+Date: 2025-10-04
+Status: STABLE - WORKING VERSION
+
+Features:
+---------
+✅ Flexible grid layout (any number of bars)
+✅ Excel-like unified grid
+✅ Piano roll directly under chord grid
+✅ Perfect alignment between chords and notes
+✅ Continuous note playback (full duration)
+✅ Soft, warm synthesizer sound
+✅ Full ADSR controls (Attack, Decay, Sustain, Release)
+✅ Smooth playhead animation (60fps)
+✅ Playhead-driven note highlighting
+✅ Works with multiple chords per bar
+✅ MIDI export functionality
+✅ BPM control (60-200)
+✅ Volume and sound controls
+✅ Click bars to preview chords
+✅ Professional UI design
+
+Technical Details:
+------------------
+- requestAnimationFrame for smooth playhead
+- getBoundingClientRect for pixel-perfect collision detection
+- Tone.js for audio synthesis
+- Pure JavaScript (no frameworks)
+- CSS Grid for layout
+- MIDI file format 1 export
+
+Files:
+------
+- index.html (main HTML)
+- styles.css (styling)
+- app.js (main application logic)
+- index-old-backup.html (backup of old version)
+- styles-old-backup.css (backup of old version)
+- app-old-backup.js (backup of old version)
+
+Notes:
+------
+This version has been tested and works correctly with:
+- Single chord per bar: |Am|F|C|G|
+- Multiple chords per bar: |Am F|C G|Dm G|C|
+- Variable number of bars (1-100+)
+- Playhead highlighting synchronized with audio
+- MIDI export compatible with all DAWs
+
+DO NOT MODIFY WITHOUT BACKUP!
