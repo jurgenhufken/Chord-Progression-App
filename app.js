@@ -1,14 +1,36 @@
 // Chord Progression Studio - Version 3.0 - Full MIDI Editor
 class ChordProgressionApp {
     constructor() {
-        this.progression = [];
-        this.originalProgression = []; // Store original state
+        this.selectedBar = null;
+        this.clipboard = [];
         this.isModified = false;
         this.synth = null;
         this.isPlaying = false;
         this.currentBar = 0;
         this.bpm = 120;
         this.loopEnabled = true; // Default ON
+        
+        // Modulation system
+        this.modulation = {
+            lfo1: { rate: 0.25, depth: 0.5, waveform: 'sine', phase: 0 },
+            lfo2: { rate: 0.125, depth: 0.75, waveform: 'triangle', phase: 0 },
+            routing: {}, // { ParamName: 'lfo1' or 'lfo2' }
+            learningMode: false,
+            learningLFO: null, // 'lfo1' or 'lfo2'
+            startTime: 0 // Track when playback started
+        };
+        
+        // Start LFO meter animation
+        this.startLFOMeterAnimation();
+        
+        // Drum sequencer
+        this.drumPatterns = {}; // { barIndex: { kick: { steps: [0,0,1,...], velocity: [...], duration: [...], gate: [...], ratchet: [...] } } }
+        this.drumSounds = null;
+        this.drumEffects = null;
+        this.drumRouting = {}; // { drumKey: { delay: 0.5, reverb: 0.3, distortion: 0 } }
+        this.currentDrumStep = 0;
+        this.drumClipboard = null;
+        this.selectedDrumTrack = null; // For showing parameters
         
         // Arpeggiator
         this.arpEnabled = false;
@@ -73,6 +95,7 @@ class ChordProgressionApp {
         this.setupSynth();
         this.setupEventListeners();
         this.parseChords();
+        this.buildDrumGrid();
         
         // Set loop button active by default
         const loopBtn = document.getElementById('loopBtn');
@@ -278,6 +301,9 @@ class ChordProgressionApp {
         this.delay.connect(this.reverb);
         this.reverb.toDestination();
         
+        // Create drum sounds
+        this.createDrumSounds();
+        
         this.synth.volume.value = -20;
     }
 
@@ -297,17 +323,46 @@ class ChordProgressionApp {
             this.synth.set({ oscillator: { type: e.target.value } });
         });
         document.getElementById('attack').addEventListener('input', (e) => {
-            this.synth.set({ envelope: { attack: parseFloat(e.target.value) } });
+            const value = parseFloat(e.target.value);
+            this.synth.set({ envelope: { attack: value } });
+            document.getElementById('attackValue').textContent = value.toFixed(2) + 's';
         });
         document.getElementById('decay')?.addEventListener('input', (e) => {
-            this.synth.set({ envelope: { decay: parseFloat(e.target.value) } });
+            const value = parseFloat(e.target.value);
+            this.synth.set({ envelope: { decay: value } });
+            document.getElementById('decayValue').textContent = value.toFixed(2) + 's';
         });
         document.getElementById('sustain')?.addEventListener('input', (e) => {
-            this.synth.set({ envelope: { sustain: parseFloat(e.target.value) } });
+            const value = parseFloat(e.target.value);
+            this.synth.set({ envelope: { sustain: value } });
+            document.getElementById('sustainValue').textContent = value.toFixed(2);
         });
         document.getElementById('release').addEventListener('input', (e) => {
-            this.synth.set({ envelope: { release: parseFloat(e.target.value) } });
+            const value = parseFloat(e.target.value);
+            this.synth.set({ envelope: { release: value } });
+            document.getElementById('releaseValue').textContent = value.toFixed(2) + 's';
         });
+        
+        // Synth presets
+        document.querySelectorAll('.preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.loadSynthPreset(btn.dataset.preset);
+                document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+        
+        // Drum presets
+        document.querySelectorAll('.drum-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.loadDrumPreset(btn.dataset.pattern);
+            });
+        });
+        
+        // Drum actions
+        document.getElementById('drumCopy')?.addEventListener('click', () => this.copyDrumBar());
+        document.getElementById('drumPaste')?.addEventListener('click', () => this.pasteDrumBar());
+        document.getElementById('drumFillRange')?.addEventListener('click', () => this.fillDrumRange());
         
         // Filter controls
         document.getElementById('filterCutoff')?.addEventListener('input', (e) => {
@@ -435,6 +490,11 @@ class ChordProgressionApp {
         });
         
         document.getElementById('applyChord')?.addEventListener('click', () => this.applyChordToSelectedBar());
+        
+        // Modulation Matrix
+        document.getElementById('openModMatrix')?.addEventListener('click', () => this.openModMatrix());
+        document.getElementById('closeModMatrix')?.addEventListener('click', () => this.closeModMatrix());
+        this.setupModulationControls();
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => this.handleKeyboard(e));
@@ -2289,6 +2349,8 @@ class ChordProgressionApp {
     async play() {
         await Tone.start();
         this.isPlaying = true;
+        this.modulation.startTime = performance.now(); // Start LFO timer
+        
         // Start from selected bar if set, otherwise from loop start
         if (this.selectedBar !== null) {
             this.currentBar = this.selectedBar;
@@ -2324,6 +2386,9 @@ class ChordProgressionApp {
             
             // Highlight current bar
             this.highlightBar(this.currentBar);
+            
+            // Play drums for this bar
+            this.playDrumPattern(this.currentBar, barDuration);
             
             // If multiple chords in bar, highlight per sub-chord
             if (bar.chords.length > 1) {
@@ -2906,6 +2971,9 @@ class ChordProgressionApp {
     selectSubBar(barIndex, chordIndex) {
         this.selectedBar = barIndex;
         this.selectedChordIndex = chordIndex;
+        
+        // Update drum grid for selected bar
+        this.updateDrumGrid();
         
         // Update visual feedback for bar
         document.querySelectorAll('.chord-cell').forEach((cell, idx) => {
@@ -4016,9 +4084,719 @@ class ChordProgressionApp {
             this.applyChordToSelectedBar();
         }
     }
+
+    // Modulation Matrix Functions
+    setupModulationControls() {
+        // LFO 1 controls
+        document.getElementById('lfo1Rate')?.addEventListener('change', (e) => {
+            this.modulation.lfo1.rate = parseFloat(e.target.value);
+            this.updateModStatus();
+        });
+        
+        document.getElementById('lfo1Depth')?.addEventListener('input', (e) => {
+            this.modulation.lfo1.depth = parseInt(e.target.value) / 100;
+            document.getElementById('lfo1DepthValue').textContent = e.target.value + '%';
+        });
+        
+        // LFO 2 controls
+        document.getElementById('lfo2Rate')?.addEventListener('change', (e) => {
+            this.modulation.lfo2.rate = parseFloat(e.target.value);
+            this.updateModStatus();
+        });
+        
+        document.getElementById('lfo2Depth')?.addEventListener('input', (e) => {
+            this.modulation.lfo2.depth = parseInt(e.target.value) / 100;
+            document.getElementById('lfo2DepthValue').textContent = e.target.value + '%';
+        });
+        
+        // Waveform buttons
+        document.querySelectorAll('.wave-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const lfo = btn.dataset.lfo;
+                const wave = btn.dataset.wave;
+                
+                // Update active state
+                document.querySelectorAll(`.wave-btn[data-lfo="${lfo}"]`).forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                // Update modulation
+                if (lfo === '1') {
+                    this.modulation.lfo1.waveform = wave;
+                } else {
+                    this.modulation.lfo2.waveform = wave;
+                }
+                
+                this.updateModStatus();
+            });
+        });
+        
+        // Learn buttons
+        document.querySelectorAll('.learn-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const lfo = btn.dataset.lfo;
+                this.startLearning(lfo);
+            });
+        });
+        
+        // Make Quick Controls mappable
+        this.makeParameterMappable('rootDisplay', 'root');
+        this.makeParameterMappable('octaveDisplay', 'octave');
+        this.makeParameterMappable('inversionDisplay', 'inversion');
+        this.makeParameterMappable('voicesDisplay', 'voices');
+        
+        // Make other controls mappable
+        this.makeSliderMappable('filterCutoff', 'filterCutoff');
+        this.makeSliderMappable('filterResonance', 'filterResonance');
+        this.makeSliderMappable('volume', 'volume');
+        this.makeSliderMappable('delayTime', 'delayTime');
+        this.makeSliderMappable('delayFeedback', 'delayFeedback');
+        this.makeSliderMappable('reverbWet', 'reverbWet');
+    }
+    
+    makeSliderMappable(elementId, paramName) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        // Wrap slider in a clickable container
+        const wrapper = document.createElement('div');
+        wrapper.classList.add('mappable-param');
+        wrapper.dataset.param = paramName;
+        wrapper.style.display = 'inline-block';
+        wrapper.style.width = '100%';
+        
+        element.parentNode.insertBefore(wrapper, element);
+        wrapper.appendChild(element);
+        
+        wrapper.addEventListener('click', (e) => {
+            if (this.modulation.learningMode) {
+                e.preventDefault();
+                e.stopPropagation();
+                this.mapParameter(paramName);
+            }
+        });
+    }
+    
+    makeParameterMappable(elementId, paramName) {
+        const element = document.getElementById(elementId);
+        if (!element) return;
+        
+        element.classList.add('mappable-param');
+        element.dataset.param = paramName;
+        
+        element.addEventListener('click', () => {
+            if (this.modulation.learningMode) {
+                this.mapParameter(paramName);
+            }
+        });
+    }
+    
+    startLearning(lfo) {
+        // Toggle learning mode
+        if (this.modulation.learningMode && this.modulation.learningLFO === lfo) {
+            this.stopLearning();
+            return;
+        }
+        
+        this.modulation.learningMode = true;
+        this.modulation.learningLFO = lfo;
+        
+        // Update UI
+        document.querySelectorAll('.learn-btn').forEach(btn => {
+            btn.classList.remove('learning');
+        });
+        document.getElementById(`learn${lfo.toUpperCase()}`).classList.add('learning');
+        
+        document.getElementById('learnStatus').textContent = `🎯 Click a parameter to map to ${lfo.toUpperCase()}...`;
+    }
+    
+    stopLearning() {
+        this.modulation.learningMode = false;
+        this.modulation.learningLFO = null;
+        
+        document.querySelectorAll('.learn-btn').forEach(btn => {
+            btn.classList.remove('learning');
+        });
+        
+        document.getElementById('learnStatus').textContent = '';
+    }
+    
+    mapParameter(paramName) {
+        if (!this.modulation.learningMode) return;
+        
+        const lfo = this.modulation.learningLFO;
+        
+        // Remove existing mapping for this param
+        if (this.modulation.routing[paramName]) {
+            delete this.modulation.routing[paramName];
+        }
+        
+        // Add new mapping
+        this.modulation.routing[paramName] = lfo;
+        
+        // Update UI
+        document.getElementById('learnStatus').textContent = `✅ Mapped ${paramName} to ${lfo.toUpperCase()}`;
+        
+        // Update visual feedback
+        document.querySelectorAll('.mappable-param').forEach(el => {
+            if (el.dataset.param === paramName) {
+                el.classList.add('mapped');
+            }
+        });
+        
+        this.updateActiveMappings();
+        this.updateModStatus();
+        this.stopLearning();
+    }
+    
+    updateActiveMappings() {
+        const mappings = Object.entries(this.modulation.routing);
+        const container = document.getElementById('activeMappings');
+        
+        if (mappings.length === 0) {
+            container.textContent = 'No mappings yet';
+            container.style.color = '#888';
+            return;
+        }
+        
+        container.innerHTML = mappings.map(([param, lfo]) => 
+            `<div style="display: flex; justify-content: space-between; padding: 0.25rem 0;">
+                <span>${param}</span>
+                <span style="color: #00d4ff;">${lfo.toUpperCase()}</span>
+                <button onclick="app.unmapParameter('${param}')" style="background: #ff4444; border: none; color: white; padding: 0.1rem 0.4rem; border-radius: 3px; cursor: pointer;">×</button>
+            </div>`
+        ).join('');
+        container.style.color = '#ccc';
+    }
+    
+    unmapParameter(paramName) {
+        delete this.modulation.routing[paramName];
+        
+        document.querySelectorAll('.mappable-param').forEach(el => {
+            if (el.dataset.param === paramName) {
+                el.classList.remove('mapped');
+            }
+        });
+        
+        this.updateActiveMappings();
+        this.updateModStatus();
+    }
+    
+    openModMatrix() {
+        document.getElementById('modMatrixPanel').style.display = 'flex';
+    }
+    
+    closeModMatrix() {
+        document.getElementById('modMatrixPanel').style.display = 'none';
+    }
+    
+    updateModStatus() {
+        // Update widget status
+        const getWaveLabel = (wave) => {
+            if (wave === 'random') return 'Rnd';
+            return wave.charAt(0).toUpperCase() + wave.slice(1, 3);
+        };
+        const lfo1Wave = getWaveLabel(this.modulation.lfo1.waveform);
+        const lfo2Wave = getWaveLabel(this.modulation.lfo2.waveform);
+        
+        const rateToString = (rate) => {
+            if (rate === 1) return '1';
+            if (rate === 0.5) return '1/2';
+            if (rate === 0.25) return '1/4';
+            if (rate === 0.125) return '1/8';
+            if (rate === 0.0625) return '1/16';
+            return rate.toString();
+        };
+        
+        document.getElementById('lfo1Status').textContent = `${rateToString(this.modulation.lfo1.rate)} ${lfo1Wave}`;
+        document.getElementById('lfo2Status').textContent = `${rateToString(this.modulation.lfo2.rate)} ${lfo2Wave}`;
+        
+        const activeCount = Object.keys(this.modulation.routing).length;
+        document.getElementById('modActiveCount').textContent = `${activeCount} active`;
+    }
+    
+    getLFOValue(lfoName, time) {
+        const lfo = this.modulation[lfoName];
+        if (!lfo) return 0;
+        
+        // Calculate phase based on time and rate
+        const phase = (time * lfo.rate + lfo.phase) % 1;
+        
+        // Generate waveform
+        let value = 0;
+        switch (lfo.waveform) {
+            case 'sine':
+                value = Math.sin(phase * Math.PI * 2);
+                break;
+            case 'triangle':
+                value = phase < 0.5 ? (phase * 4 - 1) : (3 - phase * 4);
+                break;
+            case 'square':
+                value = phase < 0.5 ? 1 : -1;
+                break;
+            case 'sawtooth':
+                value = phase * 2 - 1;
+                break;
+            case 'random':
+                // Sample & hold random - changes at each cycle
+                value = (Math.sin(Math.floor(phase * 8) * 12345.6789) * 2) - 1;
+                break;
+        }
+        
+        return value * lfo.depth;
+    }
+    
+    applyModulation(paramName, baseValue, time) {
+        const routing = this.modulation.routing[paramName];
+        if (!routing) return baseValue;
+        
+        const lfoValue = this.getLFOValue(routing, time);
+        
+        // Apply modulation based on parameter type
+        switch (paramName) {
+            case 'octave':
+                // Modulate between 2-6
+                return Math.round(Math.max(2, Math.min(6, baseValue + lfoValue * 2)));
+            case 'inversion':
+                // Modulate between 0-3
+                return Math.round(Math.max(0, Math.min(3, baseValue + lfoValue * 2)));
+            case 'voices':
+                // Modulate between 1-7
+                return Math.round(Math.max(1, Math.min(7, baseValue + lfoValue * 3)));
+            case 'bpm':
+                // Modulate BPM ±20%
+                return Math.round(Math.max(60, Math.min(200, baseValue + lfoValue * baseValue * 0.2)));
+            case 'filterCutoff':
+                // Modulate filter cutoff 20Hz - 20000Hz
+                return Math.max(20, Math.min(20000, baseValue + lfoValue * 5000));
+            case 'filterResonance':
+                // Modulate resonance 0-30
+                return Math.max(0, Math.min(30, baseValue + lfoValue * 10));
+            case 'volume':
+                // Modulate volume 0-100
+                return Math.max(0, Math.min(100, baseValue + lfoValue * 30));
+            case 'delayTime':
+            case 'delayFeedback':
+            case 'reverbWet':
+                // Modulate 0-1 range
+                return Math.max(0, Math.min(1, baseValue + lfoValue * 0.3));
+            default:
+                return baseValue;
+        }
+    }
+    
+    startLFOMeterAnimation() {
+        const updateMeters = () => {
+            const currentTime = (performance.now() - this.modulation.startTime) / 1000;
+            
+            // Update LFO meters
+            const lfo1Value = this.getLFOValue('lfo1', currentTime);
+            const lfo1Percent = ((lfo1Value + 1) / 2) * 100; // Convert -1..1 to 0..100
+            document.getElementById('lfo1Meter').style.width = lfo1Percent + '%';
+            
+            const lfo2Value = this.getLFOValue('lfo2', currentTime);
+            const lfo2Percent = ((lfo2Value + 1) / 2) * 100;
+            document.getElementById('lfo2Meter').style.width = lfo2Percent + '%';
+            
+            // Apply modulation to parameters during playback
+            if (this.isPlaying) {
+                this.applyLFOModulation(currentTime);
+            }
+            
+            requestAnimationFrame(updateMeters);
+        };
+        
+        requestAnimationFrame(updateMeters);
+    }
+    
+    applyLFOModulation(time) {
+        // Apply modulation to each mapped parameter
+        Object.entries(this.modulation.routing).forEach(([param, lfo]) => {
+            const element = document.getElementById(param);
+            if (!element) return;
+            
+            const baseValue = parseFloat(element.value || element.textContent);
+            const modulatedValue = this.applyModulation(param, baseValue, time);
+            
+            // Apply to actual parameter
+            switch (param) {
+                case 'filterCutoff':
+                    if (this.filter) {
+                        this.filter.frequency.value = modulatedValue;
+                    }
+                    break;
+                case 'filterResonance':
+                    if (this.filter) {
+                        this.filter.Q.value = modulatedValue;
+                    }
+                    break;
+                case 'volume':
+                    if (this.synth) {
+                        this.synth.volume.value = Tone.gainToDb(modulatedValue / 100);
+                    }
+                    break;
+                case 'delayTime':
+                    if (this.delay) {
+                        this.delay.delayTime.value = modulatedValue;
+                    }
+                    break;
+                case 'delayFeedback':
+                    if (this.delay) {
+                        this.delay.feedback.value = modulatedValue;
+                    }
+                    break;
+                case 'reverbWet':
+                    if (this.reverb) {
+                        this.reverb.wet.value = modulatedValue;
+                    }
+                    break;
+            }
+        });
+    }
+    
+    loadSynthPreset(presetName) {
+        const presets = {
+            pad: {
+                waveform: 'sine',
+                attack: 0.8,
+                decay: 0.3,
+                sustain: 0.7,
+                release: 1.5,
+                filterCutoff: 800,
+                filterResonance: 2
+            },
+            lead: {
+                waveform: 'sawtooth',
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0.5,
+                release: 0.3,
+                filterCutoff: 3000,
+                filterResonance: 5
+            },
+            bass: {
+                waveform: 'square',
+                attack: 0.01,
+                decay: 0.1,
+                sustain: 0.8,
+                release: 0.2,
+                filterCutoff: 400,
+                filterResonance: 3
+            },
+            pluck: {
+                waveform: 'triangle',
+                attack: 0.001,
+                decay: 0.3,
+                sustain: 0.0,
+                release: 0.5,
+                filterCutoff: 2000,
+                filterResonance: 1
+            }
+        };
+        
+        const preset = presets[presetName];
+        if (!preset) return;
+        
+        // Apply preset to synth
+        this.synth.set({
+            oscillator: { type: preset.waveform },
+            envelope: {
+                attack: preset.attack,
+                decay: preset.decay,
+                sustain: preset.sustain,
+                release: preset.release
+            }
+        });
+        
+        // Update UI
+        document.getElementById('waveform').value = preset.waveform;
+        document.getElementById('attack').value = preset.attack;
+        document.getElementById('attackValue').textContent = preset.attack.toFixed(2) + 's';
+        document.getElementById('decay').value = preset.decay;
+        document.getElementById('decayValue').textContent = preset.decay.toFixed(2) + 's';
+        document.getElementById('sustain').value = preset.sustain;
+        document.getElementById('sustainValue').textContent = preset.sustain.toFixed(2);
+        document.getElementById('release').value = preset.release;
+        document.getElementById('releaseValue').textContent = preset.release.toFixed(2) + 's';
+        document.getElementById('filterCutoff').value = preset.filterCutoff;
+        document.getElementById('filterResonance').value = preset.filterResonance;
+        
+        // Apply filter settings
+        this.filter.frequency.value = preset.filterCutoff;
+        this.filter.Q.value = preset.filterResonance;
+        
+        console.log(`Loaded preset: ${presetName}`);
+    }
+    
+    // Drum Sequencer Functions
+    createDrumSounds() {
+        this.drumSounds = {
+            kick: new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 10,
+                oscillator: { type: 'sine' },
+                envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4, attackCurve: 'exponential' }
+            }).toDestination(),
+            
+            snare: new Tone.NoiseSynth({
+                noise: { type: 'white' },
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+            }).toDestination(),
+            
+            hihat: new Tone.MetalSynth({
+                frequency: 200,
+                envelope: { attack: 0.001, decay: 0.1, release: 0.01 },
+                harmonicity: 5.1,
+                modulationIndex: 32,
+                resonance: 4000,
+                octaves: 1.5
+            }).toDestination(),
+            
+            clap: new Tone.NoiseSynth({
+                noise: { type: 'pink' },
+                envelope: { attack: 0.001, decay: 0.15, sustain: 0 }
+            }).toDestination()
+        };
+        
+        // Set volumes
+        this.drumSounds.kick.volume.value = -10;
+        this.drumSounds.snare.volume.value = -15;
+        this.drumSounds.hihat.volume.value = -20;
+        this.drumSounds.clap.volume.value = -18;
+    }
+    
+    buildDrumGrid() {
+        const container = document.getElementById('drumGrid');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        const drums = [
+            { name: 'Kick', key: 'kick' },
+            { name: 'Snare', key: 'snare' },
+            { name: 'Hi-Hat', key: 'hihat' },
+            { name: 'Clap', key: 'clap' }
+        ];
+        
+        // Add bar numbers row
+        const barNumbers = document.createElement('div');
+        barNumbers.className = 'drum-bar-numbers';
+        this.progression.forEach((bar, barIdx) => {
+            const barNum = document.createElement('div');
+            barNum.className = 'drum-bar-number';
+            barNum.textContent = `Bar ${bar.barNum}`;
+            barNumbers.appendChild(barNum);
+        });
+        container.appendChild(barNumbers);
+        
+        // Build each drum track horizontally across all bars
+        drums.forEach(drum => {
+            const track = document.createElement('div');
+            track.className = 'drum-track';
+            
+            const label = document.createElement('div');
+            label.className = 'drum-label';
+            label.textContent = drum.name;
+            track.appendChild(label);
+            
+            // Add steps for each bar
+            this.progression.forEach((bar, barIdx) => {
+                const barSteps = document.createElement('div');
+                barSteps.className = 'drum-steps';
+                
+                // 16 steps per bar
+                for (let i = 0; i < 16; i++) {
+                    const step = document.createElement('div');
+                    step.className = 'drum-step';
+                    step.dataset.drum = drum.key;
+                    step.dataset.bar = barIdx;
+                    step.dataset.step = i;
+                    
+                    step.addEventListener('click', () => {
+                        this.toggleDrumStep(drum.key, barIdx, i);
+                    });
+                    
+                    barSteps.appendChild(step);
+                }
+                
+                track.appendChild(barSteps);
+            });
+            
+            container.appendChild(track);
+        });
+        
+        this.updateDrumGrid();
+    }
+    
+    toggleDrumStep(drum, barIndex, step) {
+        if (!this.drumPatterns[barIndex]) {
+            this.drumPatterns[barIndex] = {
+                kick: new Array(16).fill(0),
+                snare: new Array(16).fill(0),
+                hihat: new Array(16).fill(0),
+                clap: new Array(16).fill(0)
+            };
+        }
+        
+        this.drumPatterns[barIndex][drum][step] = this.drumPatterns[barIndex][drum][step] ? 0 : 1;
+        this.updateDrumGrid();
+    }
+    
+    updateDrumGrid() {
+        document.querySelectorAll('.drum-step').forEach(step => {
+            const drum = step.dataset.drum;
+            const barIdx = parseInt(step.dataset.bar);
+            const stepNum = parseInt(step.dataset.step);
+            
+            const pattern = this.drumPatterns[barIdx];
+            
+            if (pattern && pattern[drum] && pattern[drum][stepNum]) {
+                step.classList.add('active');
+            } else {
+                step.classList.remove('active');
+            }
+        });
+    }
+    
+    loadDrumPreset(presetName) {
+        const barIndex = this.selectedBar || 0;
+        
+        const presets = {
+            basic: {
+                kick: [1,0,0,0, 1,0,0,0, 1,0,0,0, 1,0,0,0],
+                snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+                hihat: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,0],
+                clap: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
+            },
+            funk: {
+                kick: [1,0,0,1, 0,0,1,0, 0,1,0,0, 1,0,0,0],
+                snare: [0,0,0,0, 1,0,0,1, 0,0,0,0, 1,0,0,0],
+                hihat: [1,1,0,1, 1,1,0,1, 1,1,0,1, 1,1,0,1],
+                clap: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
+            },
+            dnb: {
+                kick: [1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,1],
+                snare: [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,0],
+                hihat: [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],
+                clap: [0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0]
+            },
+            clear: {
+                kick: new Array(16).fill(0),
+                snare: new Array(16).fill(0),
+                hihat: new Array(16).fill(0),
+                clap: new Array(16).fill(0)
+            }
+        };
+        
+        if (presets[presetName]) {
+            this.drumPatterns[barIndex] = presets[presetName];
+            this.updateDrumGrid();
+        }
+    }
+    
+    playDrumPattern(barIndex, barDuration) {
+        const pattern = this.drumPatterns[barIndex];
+        if (!pattern) return;
+        
+        const stepDuration = barDuration / 16; // 16 steps per bar
+        
+        // Play each drum track
+        Object.keys(pattern).forEach(drumKey => {
+            const steps = pattern[drumKey];
+            
+            steps.forEach((active, stepIndex) => {
+                if (active) {
+                    const delay = stepIndex * stepDuration * 1000; // Convert to ms
+                    
+                    setTimeout(() => {
+                        // Play drum sound
+                        if (this.drumSounds[drumKey]) {
+                            if (drumKey === 'kick') {
+                                this.drumSounds.kick.triggerAttackRelease('C1', '16n');
+                            } else {
+                                this.drumSounds[drumKey].triggerAttackRelease('16n');
+                            }
+                        }
+                        
+                        // Highlight step
+                        this.highlightDrumStep(drumKey, stepIndex);
+                    }, delay);
+                }
+            });
+        });
+    }
+    
+    highlightDrumStep(drum, step) {
+        // Remove previous highlights for this drum
+        document.querySelectorAll(`.drum-step[data-drum="${drum}"].playing`).forEach(el => {
+            el.classList.remove('playing');
+        });
+        
+        // Highlight current step
+        const stepEl = document.querySelector(`.drum-step[data-drum="${drum}"][data-step="${step}"]`);
+        if (stepEl) {
+            stepEl.classList.add('playing');
+            
+            // Remove after a short time
+            setTimeout(() => {
+                stepEl.classList.remove('playing');
+            }, 100);
+        }
+    }
+    
+    copyDrumBar() {
+        const barIndex = this.selectedBar !== null ? this.selectedBar : 0;
+        const pattern = this.drumPatterns[barIndex];
+        
+        if (pattern) {
+            this.drumClipboard = JSON.parse(JSON.stringify(pattern));
+            console.log(`Copied drum pattern from bar ${barIndex + 1}`);
+        } else {
+            alert('No drum pattern in selected bar to copy');
+        }
+    }
+    
+    pasteDrumBar() {
+        if (!this.drumClipboard) {
+            alert('No drum pattern copied yet');
+            return;
+        }
+        
+        const barIndex = this.selectedBar !== null ? this.selectedBar : 0;
+        this.drumPatterns[barIndex] = JSON.parse(JSON.stringify(this.drumClipboard));
+        this.updateDrumGrid();
+        console.log(`Pasted drum pattern to bar ${barIndex + 1}`);
+    }
+    
+    fillDrumRange() {
+        if (!this.drumClipboard) {
+            alert('No drum pattern copied yet. Copy a bar first!');
+            return;
+        }
+        
+        const start = prompt('Fill from bar number:', '1');
+        const end = prompt('Fill to bar number:', this.progression.length.toString());
+        
+        if (!start || !end) return;
+        
+        const startBar = parseInt(start) - 1;
+        const endBar = parseInt(end) - 1;
+        
+        if (startBar < 0 || endBar >= this.progression.length || startBar > endBar) {
+            alert('Invalid range!');
+            return;
+        }
+        
+        for (let i = startBar; i <= endBar; i++) {
+            this.drumPatterns[i] = JSON.parse(JSON.stringify(this.drumClipboard));
+        }
+        
+        this.updateDrumGrid();
+        console.log(`Filled drum pattern from bar ${startBar + 1} to ${endBar + 1}`);
+    }
 }
 
 // Initialize
+let app; // Global reference for inline event handlers
 document.addEventListener('DOMContentLoaded', () => {
-    new ChordProgressionApp();
+    app = new ChordProgressionApp();
 });

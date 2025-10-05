@@ -3,7 +3,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chord Progression Studio</title>
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=30">
 </head>
 <body>
     <div class="app-container">
@@ -260,6 +260,32 @@
                 </div>
 
                 <div class="section">
+                    <h3>🎛️ Modulation</h3>
+                    <div class="modulation-widget" id="modulationWidget">
+                        <div class="mod-status">
+                            <div class="mod-lfo-info">
+                                <span class="mod-label">LFO1:</span>
+                                <span id="lfo1Status">1/4 Sine</span>
+                                <div class="lfo-meter">
+                                    <div class="lfo-meter-bar" id="lfo1Meter"></div>
+                                </div>
+                            </div>
+                            <div class="mod-lfo-info">
+                                <span class="mod-label">LFO2:</span>
+                                <span id="lfo2Status">1/8 Tri</span>
+                                <div class="lfo-meter">
+                                    <div class="lfo-meter-bar" id="lfo2Meter"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mod-footer">
+                            <span id="modActiveCount">0 active</span>
+                            <button class="mod-settings-btn" id="openModMatrix" title="Open Modulation Matrix">⚙️</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
                     <h3>Bars</h3>
                     <button id="addBar" class="btn-secondary">➕ Add Bar</button>
                 </div>
@@ -314,7 +340,16 @@
                 </div>
 
                 <div class="section">
-                    <h3>Synth Controls</h3>
+                    <h3>🎹 Synth Designer</h3>
+                    
+                    <!-- Presets -->
+                    <div class="synth-presets" style="display: flex; gap: 0.25rem; margin-bottom: 0.75rem;">
+                        <button class="preset-btn" data-preset="pad">Pad</button>
+                        <button class="preset-btn" data-preset="lead">Lead</button>
+                        <button class="preset-btn" data-preset="bass">Bass</button>
+                        <button class="preset-btn" data-preset="pluck">Pluck</button>
+                    </div>
+                    
                     <label>Volume: <input type="range" id="volume" min="0" max="100" value="70"></label>
                     <label>Waveform:
                         <select id="waveform">
@@ -324,11 +359,35 @@
                             <option value="sine">Sine (Pure)</option>
                         </select>
                     </label>
-                    <label>Attack: <input type="range" id="attack" min="0" max="1" step="0.01" value="0.01"></label>
-                    <label>Decay: <input type="range" id="decay" min="0" max="1" step="0.01" value="0.1"></label>
-                    <label>Sustain: <input type="range" id="sustain" min="0" max="1" step="0.01" value="0.9"></label>
-                    <label>Release: <input type="range" id="release" min="0" max="2" step="0.01" value="0.3"></label>
-                    <label>
+                    
+                    <!-- Amplitude Envelope -->
+                    <details open style="margin-top: 0.5rem;">
+                        <summary style="cursor: pointer; color: #00d4ff;">Amp Envelope (ADSR)</summary>
+                        <div style="padding-left: 0.5rem; margin-top: 0.5rem;">
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Attack:</span>
+                                <input type="range" id="attack" min="0" max="5" step="0.01" value="0.01" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="attackValue" style="min-width: 50px; text-align: right; color: #00d4ff;">0.01s</span>
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Decay:</span>
+                                <input type="range" id="decay" min="0" max="5" step="0.01" value="0.1" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="decayValue" style="min-width: 50px; text-align: right; color: #00d4ff;">0.1s</span>
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Sustain:</span>
+                                <input type="range" id="sustain" min="0" max="1" step="0.01" value="0.9" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="sustainValue" style="min-width: 50px; text-align: right; color: #00d4ff;">0.9</span>
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Release:</span>
+                                <input type="range" id="release" min="0" max="10" step="0.01" value="0.3" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="releaseValue" style="min-width: 50px; text-align: right; color: #00d4ff;">0.3s</span>
+                            </label>
+                        </div>
+                    </details>
+                    
+                    <label style="margin-top: 0.5rem;">
                         <input type="checkbox" id="notePreview" checked> Note Preview
                     </label>
                 </div>
@@ -404,6 +463,59 @@
                     </div>
                 </div>
                 
+                <!-- Drum Sequencer -->
+                <div class="drum-sequencer" id="drumSequencer">
+                    <div class="drum-header">
+                        <h3>🥁 Drum Sequencer</h3>
+                        <div class="drum-controls">
+                            <button class="drum-preset-btn" data-pattern="basic">Basic</button>
+                            <button class="drum-preset-btn" data-pattern="funk">Funk</button>
+                            <button class="drum-preset-btn" data-pattern="dnb">DnB</button>
+                            <button class="drum-preset-btn" data-pattern="clear">Clear</button>
+                            <span style="color: #888; margin: 0 1rem;">|</span>
+                            <button class="drum-action-btn" id="drumCopy">Copy Bar</button>
+                            <button class="drum-action-btn" id="drumPaste">Paste Bar</button>
+                            <button class="drum-action-btn" id="drumFillRange">Fill Range...</button>
+                        </div>
+                    </div>
+                    <div class="drum-grid-wrapper">
+                        <div id="drumGrid" class="drum-grid-horizontal">
+                            <!-- Drum grid will be generated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Drum Parameters (shown when track selected) -->
+                    <div id="drumParameters" class="drum-parameters" style="display: none;">
+                        <h4 id="drumParamTitle">Kick Parameters</h4>
+                        <div class="drum-param-grid">
+                            <div class="drum-param-row">
+                                <label>Velocity:</label>
+                                <div id="velocitySliders" class="param-sliders"></div>
+                            </div>
+                            <div class="drum-param-row">
+                                <label>Duration:</label>
+                                <div id="durationSliders" class="param-sliders"></div>
+                            </div>
+                            <div class="drum-param-row">
+                                <label>Gate:</label>
+                                <div id="gateSliders" class="param-sliders"></div>
+                            </div>
+                            <div class="drum-param-row">
+                                <label>Ratchet:</label>
+                                <div id="ratchetSliders" class="param-sliders"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Drum Effects Routing -->
+                    <div class="drum-effects-section">
+                        <h4>🎚️ Drum Effects Routing</h4>
+                        <div id="drumEffectsRouting" class="drum-effects-routing">
+                            <!-- Effects routing will be generated here -->
+                        </div>
+                    </div>
+                </div>
+                
                 <!-- Analysis Panel -->
                 <div class="analysis-panel" id="analysisPanel">
                     <h3>🎼 Music Theory Analysis</h3>
@@ -463,8 +575,102 @@
         </div>
     </div>
 
+    <!-- Modulation Matrix Floating Panel -->
+    <div class="mod-matrix-panel" id="modMatrixPanel" style="display: none;">
+        <div class="mod-matrix-header">
+            <h3>🎛️ Modulation Matrix</h3>
+            <button class="btn-close-panel" id="closeModMatrix">✕</button>
+        </div>
+        <div class="mod-matrix-content">
+            <!-- LFO 1 -->
+            <div class="lfo-section">
+                <h4>LFO 1</h4>
+                <div class="lfo-controls">
+                    <label>
+                        Rate:
+                        <select id="lfo1Rate" class="mod-select">
+                            <option value="1">1 bar</option>
+                            <option value="0.5">1/2</option>
+                            <option value="0.25" selected>1/4</option>
+                            <option value="0.125">1/8</option>
+                            <option value="0.0625">1/16</option>
+                        </select>
+                    </label>
+                    <label>
+                        Depth:
+                        <input type="range" id="lfo1Depth" min="0" max="100" value="50" class="mod-slider">
+                        <span id="lfo1DepthValue">50%</span>
+                    </label>
+                    <label>Waveform:</label>
+                    <div class="waveform-buttons">
+                        <button class="wave-btn active" data-lfo="1" data-wave="sine">○ Sine</button>
+                        <button class="wave-btn" data-lfo="1" data-wave="triangle">△ Tri</button>
+                        <button class="wave-btn" data-lfo="1" data-wave="square">□ Sqr</button>
+                        <button class="wave-btn" data-lfo="1" data-wave="sawtooth">⊿ Saw</button>
+                        <button class="wave-btn" data-lfo="1" data-wave="random">⚡ Rnd</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LFO 2 -->
+            <div class="lfo-section">
+                <h4>LFO 2</h4>
+                <div class="lfo-controls">
+                    <label>
+                        Rate:
+                        <select id="lfo2Rate" class="mod-select">
+                            <option value="1">1 bar</option>
+                            <option value="0.5">1/2</option>
+                            <option value="0.25">1/4</option>
+                            <option value="0.125" selected>1/8</option>
+                            <option value="0.0625">1/16</option>
+                        </select>
+                    </label>
+                    <label>
+                        Depth:
+                        <input type="range" id="lfo2Depth" min="0" max="100" value="75" class="mod-slider">
+                        <span id="lfo2DepthValue">75%</span>
+                    </label>
+                    <label>Waveform:</label>
+                    <div class="waveform-buttons">
+                        <button class="wave-btn" data-lfo="2" data-wave="sine">○ Sine</button>
+                        <button class="wave-btn active" data-lfo="2" data-wave="triangle">△ Tri</button>
+                        <button class="wave-btn" data-lfo="2" data-wave="square">□ Sqr</button>
+                        <button class="wave-btn" data-lfo="2" data-wave="sawtooth">⊿ Saw</button>
+                        <button class="wave-btn" data-lfo="2" data-wave="random">⚡ Rnd</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Learn Mode -->
+            <div class="routing-section">
+                <h4>Map to Parameter</h4>
+                <p style="color: #888; font-size: 0.85rem; margin-bottom: 1rem;">
+                    Click a button below, then click any parameter in the sidebar to map it.
+                </p>
+                <div class="learn-buttons">
+                    <button class="learn-btn" id="learnLFO1" data-lfo="lfo1">
+                        🎛️ Learn LFO 1
+                    </button>
+                    <button class="learn-btn" id="learnLFO2" data-lfo="lfo2">
+                        🎛️ Learn LFO 2
+                    </button>
+                </div>
+                <div id="learnStatus" style="margin-top: 1rem; color: #00d4ff; font-size: 0.9rem; min-height: 20px;">
+                    <!-- Status messages appear here -->
+                </div>
+                <div class="routing-list" style="margin-top: 1rem;">
+                    <h4 style="margin-bottom: 0.5rem;">Active Mappings:</h4>
+                    <div id="activeMappings" style="color: #888; font-size: 0.85rem;">
+                        No mappings yet
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/midi-writer-js@2.1.4/build/index.js"></script>
-    <script src="app.js?v=23"></script>
+    <script src="app.js?v=30"></script>
 </body>
 </html>
