@@ -24,6 +24,7 @@ class ChordProgressionApp {
         this.playheadElement = null;
         this.playheadAnimationId = null;
         this.playStartTime = 0;
+        this.playStartBar = 0;
         
         // View settings
         this.showPianoRoll = true;
@@ -58,6 +59,9 @@ class ChordProgressionApp {
         this.isBoxSelecting = false;
         this.boxSelectStart = null;
         this.selectionBox = null;
+        
+        // Selected bar for playback start
+        this.selectedBar = null;
         
         this.noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
         this.whiteKeys = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
@@ -350,6 +354,88 @@ class ChordProgressionApp {
         document.getElementById('transposeUp1')?.addEventListener('click', () => this.transpose(1));
         document.getElementById('transposeUp12')?.addEventListener('click', () => this.transpose(12));
         
+        // Chord Designer - Quality buttons
+        document.querySelectorAll('.quality-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // Remove active from all buttons
+                document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+                // Add active to clicked button
+                e.target.classList.add('active');
+                // Update chord display
+                this.updateChordDisplay();
+                // Auto-apply if locked
+                if (document.getElementById('chordLock').checked) {
+                    this.applyChordToSelectedBar();
+                }
+            });
+        });
+        
+        // Root Note dropdown
+        document.getElementById('rootNoteSelect')?.addEventListener('change', () => {
+            this.updateChordDisplay();
+            if (document.getElementById('chordLock').checked) {
+                this.applyChordToSelectedBar();
+            }
+        });
+        
+        // Arpeggio step buttons
+        document.getElementById('arpeggioUp')?.addEventListener('click', () => this.stepArpeggio(1));
+        document.getElementById('arpeggioDown')?.addEventListener('click', () => this.stepArpeggio(-1));
+        
+        // Voice count buttons
+        document.getElementById('voicesUp')?.addEventListener('click', () => this.stepVoiceCount(1));
+        document.getElementById('voicesDown')?.addEventListener('click', () => this.stepVoiceCount(-1));
+        
+        // Root Note step buttons
+        document.getElementById('rootUp')?.addEventListener('click', () => this.stepRootNote(1));
+        document.getElementById('rootDown')?.addEventListener('click', () => this.stepRootNote(-1));
+        
+        // Octave dropdown
+        document.getElementById('octaveSelect')?.addEventListener('change', () => {
+            if (document.getElementById('chordLock').checked) {
+                this.applyChordToSelectedBar();
+            }
+        });
+        
+        // Octave step buttons
+        document.getElementById('octaveUp')?.addEventListener('click', () => this.stepOctave(1));
+        document.getElementById('octaveDown')?.addEventListener('click', () => this.stepOctave(-1));
+        
+        // Inversion dropdown
+        document.getElementById('inversionSelect')?.addEventListener('change', () => {
+            if (document.getElementById('chordLock').checked) {
+                this.applyChordToSelectedBar();
+            }
+        });
+        
+        // Inversion step buttons
+        document.getElementById('inversionUp')?.addEventListener('click', () => this.stepInversion(1));
+        document.getElementById('inversionDown')?.addEventListener('click', () => this.stepInversion(-1));
+        
+        // Bass Note dropdown
+        document.getElementById('bassNoteSelect')?.addEventListener('change', () => {
+            this.updateChordDisplay();
+            if (document.getElementById('chordLock').checked) {
+                this.applyChordToSelectedBar();
+            }
+        });
+        
+        // Scale dropdown
+        document.getElementById('scaleSelect')?.addEventListener('change', () => {
+            console.log('Scale changed to:', document.getElementById('scaleSelect').value);
+        });
+        
+        // Lock toggle
+        document.getElementById('chordLock')?.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                console.log('🔒 Chord Designer locked - changes will auto-apply');
+            } else {
+                console.log('🔓 Chord Designer unlocked');
+            }
+        });
+        
+        document.getElementById('applyChord')?.addEventListener('click', () => this.applyChordToSelectedBar());
+        
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => this.handleKeyboard(e));
         
@@ -482,7 +568,7 @@ class ChordProgressionApp {
     }
 
     handleBoxSelectMove = (e) => {
-        if (!this.isBoxSelecting || !this.selectionBox) return;
+        if (!this.isBoxSelecting) return;
         
         const startX = Math.min(this.boxSelectStart.x, e.clientX);
         const startY = Math.min(this.boxSelectStart.y, e.clientY);
@@ -493,13 +579,29 @@ class ChordProgressionApp {
         this.selectionBox.style.top = startY + 'px';
         this.selectionBox.style.width = width + 'px';
         this.selectionBox.style.height = height + 'px';
-    }
-
-    handleBoxSelectEnd = (e) => {
-        if (!this.isBoxSelecting) return;
         
-        // Get all notes within selection box
+        // Play notes as they get selected (real-time preview)
         const boxRect = this.selectionBox.getBoundingClientRect();
+        const currentlyTouched = new Set();
+        
+        document.querySelectorAll('.note-block').forEach(noteBlock => {
+            const noteRect = noteBlock.getBoundingClientRect();
+            
+            if (!(noteRect.right < boxRect.left || 
+                  noteRect.left > boxRect.right || 
+                  noteRect.bottom < boxRect.top || 
+                  noteRect.top > boxRect.bottom)) {
+                const midi = parseInt(noteBlock.dataset.midi);
+                currentlyTouched.add(midi);
+                
+                // Play note if newly touched
+                if (!this.lastTouchedNotes || !this.lastTouchedNotes.has(midi)) {
+                    this.playNote(midi);
+                }
+            }
+        });
+        
+        this.lastTouchedNotes = currentlyTouched;
         
         document.querySelectorAll('.note-block').forEach(noteBlock => {
             const noteRect = noteBlock.getBoundingClientRect();
@@ -513,8 +615,28 @@ class ChordProgressionApp {
                 noteBlock.classList.add('selected');
                 const key = `${noteBlock.dataset.midi}-${noteBlock.dataset.barIndex}-${noteBlock.dataset.chordIndex}`;
                 this.selectedNotes.add(key);
+                
+                // Track which bar this note belongs to
+                selectedBarIndices.add(parseInt(noteBlock.dataset.barIndex));
+                
+                // Collect MIDI notes for preview
+                const midi = parseInt(noteBlock.dataset.midi);
+                if (!selectedMidiNotes.includes(midi)) {
+                    selectedMidiNotes.push(midi);
+                }
             }
         });
+        
+        // Play selected notes as a chord
+        if (selectedMidiNotes.length > 0) {
+            selectedMidiNotes.forEach(midi => this.playNote(midi));
+        }
+        
+        // Select the first bar that has selected notes
+        if (selectedBarIndices.size > 0) {
+            const firstBarIdx = Math.min(...Array.from(selectedBarIndices));
+            this.selectBar(firstBarIdx);
+        }
         
         // Cleanup
         if (this.selectionBox) {
@@ -526,21 +648,44 @@ class ChordProgressionApp {
         this.isBoxSelecting = false;
         this.boxSelectStart = null;
         
-        console.log('Selected notes:', this.selectedNotes.size);
+        console.log('Selected notes:', this.selectedNotes.size, 'in bars:', Array.from(selectedBarIndices));
+        
+        // Update interval analysis after box selection
+        this.updateIntervalAnalysis();
     }
 
     handleKeyboard(e) {
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        console.log('handleKeyboard called:', e.key, 'target:', e.target.tagName, 'metaKey:', e.metaKey, 'ctrlKey:', e.ctrlKey);
+        
+        // Don't intercept ANY shortcuts in input fields
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+            console.log('Blocked - in input field');
+            // Only allow Escape to work
+            if (e.key === 'Escape') {
+                this.deselectAllNotes();
+            }
+            return;
+        }
+        
+        // Escape works in main app
+        if (e.key === 'Escape') {
+            this.deselectAllNotes();
+            return;
+        }
         
         if (!this.editMode) return; // Only work in edit mode
         
-        // Ctrl+Z - Undo
-        if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
+        console.log('Key pressed:', e.key, 'Selected notes:', this.selectedNotes.size);
+        
+        // Ctrl+Z or Cmd+Z - Undo (only if not in input field)
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+            console.log('Undo triggered, target:', e.target.tagName);
             e.preventDefault();
             this.undo();
         }
-        // Ctrl+Y or Ctrl+Shift+Z - Redo
-        else if ((e.ctrlKey && e.key === 'y') || (e.ctrlKey && e.shiftKey && e.key === 'z')) {
+        // Ctrl+Y or Ctrl+Shift+Z or Cmd+Shift+Z - Redo (only if not in input field)
+        else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) {
+            console.log('Redo triggered, target:', e.target.tagName);
             e.preventDefault();
             this.redo();
         }
@@ -554,8 +699,8 @@ class ChordProgressionApp {
             e.preventDefault();
             console.log('Press Shift+Click on a bar to paste');
         }
-        // Delete key
-        else if (e.key === 'Delete') {
+        // Delete or Backspace key
+        else if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
             this.deleteSelectedNotes();
         }
@@ -564,9 +709,22 @@ class ChordProgressionApp {
             e.preventDefault();
             this.selectAllNotes();
         }
-        // Escape - Deselect
-        else if (e.key === 'Escape') {
-            this.deselectAllNotes();
+        // Arrow keys - Move selected notes
+        else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            this.moveSelectedNotes(0, 1); // Up = +1 semitone
+        }
+        else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            this.moveSelectedNotes(0, -1); // Down = -1 semitone
+        }
+        else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            this.moveSelectedNotes(-1, 0); // Left = -1 bar
+        }
+        else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            this.moveSelectedNotes(1, 0); // Right = +1 bar
         }
     }
 
@@ -576,6 +734,8 @@ class ChordProgressionApp {
         if (btn) {
             btn.textContent = this.editMode ? '🔒 Lock' : '✏️ Edit';
             btn.classList.toggle('active', this.editMode);
+            // Remove focus from button so keyboard shortcuts work
+            btn.blur();
         }
         
         // Update cursor on piano cells
@@ -774,51 +934,190 @@ class ChordProgressionApp {
                 cell.style.boxShadow = 'inset 0 0 0 3px rgba(0, 212, 255, 0.3)';
             }
             
-            // Delete bar button
-            const deleteBtn = document.createElement('button');
-            deleteBtn.textContent = '×';
-            deleteBtn.className = 'bar-delete-btn';
-            deleteBtn.style.cssText = 'position: absolute; top: 4px; right: 24px; width: 20px; height: 20px; border-radius: 50%; background: rgba(244,67,54,0.8); border: none; color: white; cursor: pointer; opacity: 0; transition: opacity 0.2s;';
-            deleteBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.deleteBar(i);
-            };
-            cell.appendChild(deleteBtn);
-            cell.addEventListener('mouseenter', () => deleteBtn.style.opacity = '1');
-            cell.addEventListener('mouseleave', () => deleteBtn.style.opacity = '0');
+            // Make cell a flex container for sub-bars
+            cell.style.display = 'flex';
+            cell.style.flexDirection = 'column';
+            cell.style.position = 'relative';
             
             const barNumLabel = document.createElement('div');
             barNumLabel.className = 'bar-num';
             barNumLabel.textContent = bar.barNum;
+            barNumLabel.style.position = 'absolute';
+            barNumLabel.style.top = '2px';
+            barNumLabel.style.left = '2px';
+            barNumLabel.style.zIndex = '10';
             cell.appendChild(barNumLabel);
             
-            const chordText = bar.chords.map(c => c.symbol).join(' ');
-            const chordLabel = document.createElement('div');
-            chordLabel.textContent = chordText || '-';
-            chordLabel.className = 'chord-label';
-            cell.appendChild(chordLabel);
+            // Top bar controls (above chord)
+            const topControls = document.createElement('div');
+            topControls.className = 'bar-controls bar-controls-top';
             
-            // Add chord input helper button
-            const editBtn = document.createElement('button');
-            editBtn.textContent = '+';
-            editBtn.className = 'chord-edit-btn';
-            editBtn.onclick = (e) => {
+            const delBarBtn = document.createElement('button');
+            delBarBtn.textContent = 'Del Bar';
+            delBarBtn.className = 'bar-control-btn bar-control-delete';
+            delBarBtn.title = 'Delete this bar';
+            delBarBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.deleteBar(i);
+            };
+            topControls.appendChild(delBarBtn);
+            
+            const newBarBtn = document.createElement('button');
+            newBarBtn.textContent = 'New Bar';
+            newBarBtn.className = 'bar-control-btn';
+            newBarBtn.title = 'Add new bar after this';
+            newBarBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.addBarAfter(i);
+            };
+            topControls.appendChild(newBarBtn);
+            
+            const splitBarBtn = document.createElement('button');
+            splitBarBtn.textContent = 'Split';
+            splitBarBtn.className = 'bar-control-btn';
+            splitBarBtn.title = 'Split bar (add sub-chord)';
+            splitBarBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.splitBar(i);
+            };
+            topControls.appendChild(splitBarBtn);
+            
+            cell.appendChild(topControls);
+            
+            // Sub-bars container (horizontal layout for multiple chords)
+            const subBarsContainer = document.createElement('div');
+            subBarsContainer.style.display = 'flex';
+            subBarsContainer.style.flex = '1';
+            subBarsContainer.style.gap = '2px';
+            
+            // Create a sub-bar for each chord
+            bar.chords.forEach((chord, chordIdx) => {
+                const subBar = document.createElement('div');
+                subBar.className = 'sub-bar';
+                subBar.style.flex = '1'; // Equal width for now
+                subBar.style.display = 'flex';
+                subBar.style.flexDirection = 'column';
+                subBar.style.justifyContent = 'center';
+                subBar.style.alignItems = 'center';
+                subBar.style.border = '1px solid #333';
+                subBar.style.borderRadius = '3px';
+                subBar.style.padding = '4px';
+                subBar.style.cursor = 'pointer';
+                subBar.style.transition = 'all 0.2s';
+                subBar.dataset.barIndex = i;
+                subBar.dataset.chordIndex = chordIdx;
+                
+                // Chord label
+                const chordLabel = document.createElement('div');
+                chordLabel.textContent = chord.symbol || '-';
+                chordLabel.className = 'chord-label';
+                chordLabel.style.fontSize = '0.9rem';
+                subBar.appendChild(chordLabel);
+                
+                // Delete sub-bar button (only if more than 1 chord)
+                if (bar.chords.length > 1) {
+                    const delSubBtn = document.createElement('button');
+                    delSubBtn.textContent = '×';
+                    delSubBtn.style.cssText = 'position: absolute; top: 2px; right: 2px; background: #ff4444; color: white; border: none; border-radius: 3px; width: 16px; height: 16px; font-size: 12px; cursor: pointer; padding: 0; line-height: 14px;';
+                    delSubBtn.title = 'Delete this sub-chord';
+                    delSubBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        this.deleteSubBar(i, chordIdx);
+                    };
+                    subBar.style.position = 'relative';
+                    subBar.appendChild(delSubBtn);
+                }
+                
+                // Click handler for sub-bar selection
+                subBar.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.selectSubBar(i, chordIdx);
+                });
+                
+                // Hover effect
+                subBar.addEventListener('mouseenter', () => {
+                    if (!subBar.classList.contains('selected-sub-bar')) {
+                        subBar.style.background = 'rgba(0, 212, 255, 0.1)';
+                    }
+                });
+                subBar.addEventListener('mouseleave', () => {
+                    if (!subBar.classList.contains('selected-sub-bar')) {
+                        subBar.style.background = '';
+                    }
+                });
+                
+                subBarsContainer.appendChild(subBar);
+            });
+            
+            cell.appendChild(subBarsContainer);
+            
+            // Bottom note controls (below chord)
+            const bottomControls = document.createElement('div');
+            bottomControls.className = 'bar-controls bar-controls-bottom';
+            
+            const copyNotesBtn = document.createElement('button');
+            copyNotesBtn.textContent = 'Copy';
+            copyNotesBtn.className = 'note-control-btn';
+            copyNotesBtn.title = 'Copy notes from this bar';
+            copyNotesBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.copyBar(i);
+            };
+            bottomControls.appendChild(copyNotesBtn);
+            
+            const pasteNotesBtn = document.createElement('button');
+            pasteNotesBtn.textContent = 'Paste';
+            pasteNotesBtn.className = 'note-control-btn';
+            pasteNotesBtn.title = 'Paste notes to this bar';
+            pasteNotesBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.setPasteTarget(i);
+            };
+            bottomControls.appendChild(pasteNotesBtn);
+            
+            const delNotesBtn = document.createElement('button');
+            delNotesBtn.textContent = 'Clear';
+            delNotesBtn.className = 'note-control-btn note-control-delete';
+            delNotesBtn.title = 'Clear all notes from this bar';
+            delNotesBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.clearBarNotes(i);
+            };
+            bottomControls.appendChild(delNotesBtn);
+            
+            const addChordBtn = document.createElement('button');
+            addChordBtn.textContent = 'Add';
+            addChordBtn.className = 'note-control-btn';
+            addChordBtn.title = 'Add chord';
+            addChordBtn.onclick = (e) => {
                 e.stopPropagation();
                 this.showChordInputHelper(i);
             };
-            cell.appendChild(editBtn);
+            bottomControls.appendChild(addChordBtn);
+            
+            cell.appendChild(bottomControls);
+            
+            // Double-click to edit chord text
+            cell.addEventListener('dblclick', (e) => {
+                e.stopPropagation();
+                this.editChordText(i, cell);
+            });
             
             cell.addEventListener('click', (e) => {
-                if (e.shiftKey && this.clipboard.length > 0) {
-                    // Shift+Click = Set paste target
-                    this.setPasteTarget(i);
-                } else if (bar.chords.length === 0 || !bar.chords[0]) {
-                    // Empty bar - show suggestions
-                    this.showSuggestionsPanel(i);
-                } else {
-                    // Has chord - preview it and analyze
-                    this.previewBar(i);
-                    this.analyzeChord(bar.chords[0]);
+                // Don't trigger if clicking on buttons
+                if (e.target.classList.contains('chord-action-btn')) return;
+                
+                // Select this bar (for editing, NOT for playback)
+                this.selectBar(i);
+                
+                // DON'T jump playhead during playback - let user edit freely
+                // Only jump if NOT playing
+                if (!this.isPlaying) {
+                    // Preview chord if it exists
+                    if (bar.chords.length > 0 && bar.chords[0]) {
+                        this.previewBar(i);
+                        this.analyzeChord(bar.chords[0]);
+                    }
                 }
             });
         });
@@ -878,6 +1177,14 @@ class ChordProgressionApp {
                         }
                     });
                 });
+            }
+        }
+        
+        // Restore selected bar visual state after rebuild
+        if (this.selectedBar !== null && this.selectedBar !== undefined) {
+            const cells = document.querySelectorAll('.chord-cell');
+            if (cells[this.selectedBar]) {
+                cells[this.selectedBar].style.border = '3px solid #00d4ff';
             }
         }
     }
@@ -989,14 +1296,54 @@ class ChordProgressionApp {
             return;
         }
         
-        // Toggle note at this position
-        this.toggleNoteAtPosition(midiNote, barIdx);
+        // Check if note exists at this position
+        const bar = this.progression[barIdx];
+        let noteExists = false;
+        let noteKey = null;
+        
+        bar.chords.forEach((chord, chordIdx) => {
+            if (chord.midiNotes.includes(midiNote)) {
+                noteExists = true;
+                noteKey = `${midiNote}-${barIdx}-${chordIdx}`;
+            }
+        });
+        
+        if (noteExists) {
+            // Note exists - select it instead of toggling
+            if (!e.ctrlKey && !e.shiftKey) {
+                this.deselectAllNotes();
+            }
+            this.selectedNotes.add(noteKey);
+            this.updateNoteSelection();
+            this.playNote(midiNote);
+        } else {
+            // Note doesn't exist - add it
+            this.toggleNoteAtPosition(midiNote, barIdx);
+        }
     }
     
     playNote(midiNote) {
         if (!this.notePreviewEnabled) return;
         const freq = Tone.Frequency(midiNote, 'midi').toFrequency();
         this.synth.triggerAttackRelease(freq, '8n');
+        
+        // Visual feedback - highlight the clicked note
+        this.highlightClickedNote(midiNote);
+    }
+    
+    highlightClickedNote(midiNote) {
+        // Find all piano cells with this MIDI note
+        const cells = document.querySelectorAll(`.piano-cell[data-midi="${midiNote}"]`);
+        
+        cells.forEach(cell => {
+            // Add flash animation class
+            cell.classList.add('note-flash');
+            
+            // Remove class after animation completes
+            setTimeout(() => {
+                cell.classList.remove('note-flash');
+            }, 300);
+        });
     }
 
     handlePianoCellMouseDown(e, midiNote, barIdx) {
@@ -1008,10 +1355,15 @@ class ChordProgressionApp {
         e.stopPropagation();
         
         const midi = parseInt(noteBlock.dataset.midi);
+        const barIdx = parseInt(noteBlock.dataset.barIndex);
+        
+        // Select the bar this note belongs to
+        this.selectBar(barIdx);
+        
+        // Always play note sound when clicking
+        this.playNote(midi);
         
         if (!this.editMode) {
-            // Preview note
-            this.playNote(midi);
             return;
         }
         
@@ -1148,6 +1500,9 @@ class ChordProgressionApp {
         this.saveState();
         const bar = this.progression[barIdx];
         
+        // Select this bar
+        this.selectBar(barIdx);
+        
         // Check if note exists in any chord
         let noteFound = false;
         bar.chords.forEach((chord, chordIdx) => {
@@ -1161,7 +1516,9 @@ class ChordProgressionApp {
                     // Remove empty chord
                     bar.chords.splice(chordIdx, 1);
                 } else {
-                    // Update chord symbol
+                    // Re-sort and update chord symbol
+                    chord.midiNotes.sort((a, b) => a - b);
+                    chord.noteNames = chord.midiNotes.map(m => this.midiToNote(m));
                     chord.symbol = this.recognizeChord(chord.midiNotes);
                 }
                 noteFound = true;
@@ -1169,7 +1526,10 @@ class ChordProgressionApp {
         });
         
         if (!noteFound) {
-            // Add note
+            // Add note - play sound when adding
+            this.playNote(midiNote);
+            
+            let chordIdx = 0;
             if (bar.chords.length === 0) {
                 // Create new chord
                 bar.chords = [{
@@ -1179,6 +1539,7 @@ class ChordProgressionApp {
                     midiNotes: [midiNote],
                     noteNames: [this.midiToNote(midiNote)]
                 }];
+                chordIdx = 0;
             } else {
                 // Add to first chord
                 const chord = bar.chords[0];
@@ -1188,51 +1549,135 @@ class ChordProgressionApp {
                 
                 // Recognize chord
                 chord.symbol = this.recognizeChord(chord.midiNotes);
+                chordIdx = 0;
             }
+            
+            // Rebuild grid first
+            this.buildGrid();
+            this.analyzeProgression();
+            
+            // Then select the newly added note
+            const noteKey = `${midiNote}-${barIdx}-${chordIdx}`;
+            this.selectedNotes.clear();
+            this.selectedNotes.add(noteKey);
+            this.updateNoteSelection();
+            
+            // Real-time sync chord builder
+            this.syncChordBuilderFromBar(barIdx);
+            this.selectBar(barIdx);
+            return;
         }
         
         this.buildGrid();
         this.analyzeProgression(); // Update analysis after note change
+        
+        // Real-time sync after removing note
+        this.syncChordBuilderFromBar(barIdx);
     }
 
     recognizeChord(midiNotes) {
-        if (!midiNotes || midiNotes.length === 0) return '?';
-        if (midiNotes.length === 1) return this.midiToNote(midiNotes[0]).replace(/\d+/, '');
+        if (!midiNotes || midiNotes.length === 0) {
+            return '?';
+        }
+        
+        if (midiNotes.length === 1) {
+            return this.midiToNote(midiNotes[0]); // Keep octave for single notes
+        }
         
         const sorted = [...midiNotes].sort((a, b) => a - b);
         const root = sorted[0];
         const intervals = sorted.map(note => (note - root) % 12).sort((a, b) => a - b);
-        
         const rootName = this.midiToNote(root).replace(/\d+/, '');
         
-        // Handle 2-note intervals (dyads)
+        // Handle 2-note intervals (dyads) - show with octaves
         if (midiNotes.length === 2) {
             const interval = intervals[1];
-            const dyads = {
-                1: rootName + ' min2',
-                2: rootName + ' maj2', 
-                3: rootName + ' min3',
-                4: rootName + ' maj3',
-                5: rootName + '5 (4th)',
-                7: rootName + '5 (Perfect)',
-                8: rootName + ' min6',
-                9: rootName + ' maj6',
-                10: rootName + ' min7',
-                11: rootName + ' maj7',
-                12: rootName + ' oct'
+            const note1 = this.midiToNote(sorted[0]);
+            const note2 = this.midiToNote(sorted[1]);
+            const intervalNames = {
+                1: 'min2',
+                2: 'maj2', 
+                3: 'min3',
+                4: 'maj3',
+                5: 'P4',
+                6: 'tritone',
+                7: 'P5',
+                8: 'min6',
+                9: 'maj6',
+                10: 'min7',
+                11: 'maj7',
+                12: 'oct'
             };
-            return dyads[interval] || rootName + ' +' + interval;
+            const intervalName = intervalNames[interval] || `+${interval}`;
+            return `${note1}-${note2} (${intervalName})`;
         }
         
         const intervalString = intervals.join(',');
+        
+        // Detect inversions and determine actual chord
+        let inversionSuffix = '';
+        let actualQuality = '';
+        
         const chordPatterns = {
-            '0,4,7': '', '0,3,7': 'm', '0,4,7,10': '7',
-            '0,3,7,10': 'm7', '0,4,7,11': 'maj7', '0,3,6': 'dim',
-            '0,4,8': 'aug', '0,5,7': 'sus4', '0,2,7': 'sus2'
+            // Triads (root position)
+            '0,4,7': { quality: '', inversion: 0 },           // Major
+            '0,3,7': { quality: 'm', inversion: 0 },          // Minor
+            '0,3,6': { quality: 'dim', inversion: 0 },        // Diminished
+            '0,4,8': { quality: 'aug', inversion: 0 },        // Augmented
+            '0,5,7': { quality: 'sus4', inversion: 0 },       // Sus4
+            '0,2,7': { quality: 'sus2', inversion: 0 },       // Sus2
+            
+            // Triads (inversions)
+            '0,3,8': { quality: '', inversion: 1 },           // Major 1st inv (e.g., E-G-C)
+            '0,5,9': { quality: '', inversion: 2 },           // Major 2nd inv (e.g., G-C-E)
+            '0,4,9': { quality: 'm', inversion: 1 },          // Minor 1st inv
+            '0,5,8': { quality: 'm', inversion: 2 },          // Minor 2nd inv
+            
+            // 7th chords
+            '0,4,7,10': { quality: '7', inversion: 0 },       // Dominant 7
+            '0,4,7,11': { quality: 'maj7', inversion: 0 },    // Major 7
+            '0,3,7,10': { quality: 'm7', inversion: 0 },      // Minor 7
+            '0,3,6,9': { quality: 'dim7', inversion: 0 },     // Diminished 7
+            '0,3,6,10': { quality: 'm7♭5', inversion: 0 },    // Half-diminished 7
+            '0,4,8,10': { quality: 'aug7', inversion: 0 },    // Augmented 7
+            
+            // 6th chords
+            '0,4,7,9': { quality: '6', inversion: 0 },        // Major 6
+            '0,3,7,9': { quality: 'm6', inversion: 0 },       // Minor 6
+            
+            // 9th chords
+            '0,4,7,10,14': { quality: '9', inversion: 0 },    // Dominant 9
+            '0,4,7,11,14': { quality: 'maj9', inversion: 0 }, // Major 9
+            '0,3,7,10,14': { quality: 'm9', inversion: 0 },   // Minor 9
+            
+            // Add chords
+            '0,2,4,7': { quality: 'add9', inversion: 0 },     // Add9
+            '0,4,5,7': { quality: 'add11', inversion: 0 },    // Add11
+            
+            // Other
+            '0,7': { quality: '5', inversion: 0 },            // Power chord
         };
         
-        const quality = chordPatterns[intervalString] || '?';
-        return rootName + quality;
+        const chordInfo = chordPatterns[intervalString];
+        
+        // If not found, show intervals for debugging
+        if (!chordInfo) {
+            console.log('Unknown chord pattern:', intervalString, 'for notes:', midiNotes);
+            return rootName + '?';
+        }
+        
+        actualQuality = chordInfo.quality;
+        
+        // Add inversion notation
+        if (chordInfo.inversion === 1) {
+            inversionSuffix = '/1';  // First inversion
+        } else if (chordInfo.inversion === 2) {
+            inversionSuffix = '/2';  // Second inversion
+        } else if (chordInfo.inversion === 3) {
+            inversionSuffix = '/3';  // Third inversion (for 7th chords)
+        }
+        
+        return rootName + actualQuality + inversionSuffix;
     }
 
     deleteSelectedNotes() {
@@ -1311,12 +1756,29 @@ class ChordProgressionApp {
 
     pasteNotes() {
         if (this.clipboard.length === 0 || this.pasteTargetBar === null) return;
-        this.saveState();
         
         const targetBar = this.progression[this.pasteTargetBar];
+        const targetBarIdx = this.pasteTargetBar;
         
-        // Create or get first chord in target bar
-        if (targetBar.chords.length === 0) {
+        // Check if there are existing notes and if there will be conflicts
+        const hasExistingNotes = targetBar.chords.length > 0 && targetBar.chords[0] && targetBar.chords[0].midiNotes.length > 0;
+        
+        if (hasExistingNotes) {
+            // Check for conflicts
+            const existingNotes = targetBar.chords[0].midiNotes;
+            const hasConflicts = this.clipboard.some(item => existingNotes.includes(item.midiNote));
+            
+            if (hasConflicts) {
+                // Show custom dialog with 3 options
+                this.showPasteDialog(targetBarIdx);
+                return; // Exit and wait for user choice
+            } else {
+                // No conflicts, just merge
+                this.saveState();
+            }
+        } else {
+            // No existing notes, just paste
+            this.saveState();
             targetBar.chords = [{
                 symbol: '?',
                 root: '',
@@ -1326,25 +1788,170 @@ class ChordProgressionApp {
             }];
         }
         
+        this.executePaste(targetBarIdx, 'merge');
+    }
+
+    showPasteDialog(targetBarIdx) {
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+        
+        const dialog = document.createElement('div');
+        dialog.style.cssText = 'background: #2a2a2a; border: 2px solid #00d4ff; border-radius: 8px; padding: 2rem; max-width: 400px;';
+        
+        const title = document.createElement('h3');
+        title.textContent = 'Paste Conflict';
+        title.style.cssText = 'color: #00d4ff; margin: 0 0 1rem 0;';
+        dialog.appendChild(title);
+        
+        const message = document.createElement('p');
+        message.textContent = 'Target bar already has notes. How do you want to paste?';
+        message.style.cssText = 'color: #fff; margin-bottom: 1.5rem;';
+        dialog.appendChild(message);
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = 'display: flex; gap: 0.5rem; flex-direction: column;';
+        
+        // Replace button
+        const replaceBtn = document.createElement('button');
+        replaceBtn.textContent = 'Replace (clear existing, paste new)';
+        replaceBtn.style.cssText = 'padding: 0.75rem; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;';
+        replaceBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            this.executePaste(targetBarIdx, 'replace');
+        };
+        buttonContainer.appendChild(replaceBtn);
+        
+        // Merge button
+        const mergeBtn = document.createElement('button');
+        mergeBtn.textContent = 'Merge (keep existing + add new)';
+        mergeBtn.style.cssText = 'padding: 0.75rem; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;';
+        mergeBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            this.executePaste(targetBarIdx, 'merge');
+        };
+        buttonContainer.appendChild(mergeBtn);
+        
+        // Cancel button
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = 'padding: 0.75rem; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;';
+        cancelBtn.onclick = () => {
+            document.body.removeChild(overlay);
+            this.pasteTargetBar = null;
+        };
+        buttonContainer.appendChild(cancelBtn);
+        
+        dialog.appendChild(buttonContainer);
+        overlay.appendChild(dialog);
+        document.body.appendChild(overlay);
+    }
+
+    executePaste(targetBarIdx, mode) {
+        const targetBar = this.progression[targetBarIdx];
+        
+        // Save state BEFORE making changes
+        this.saveState();
+        
+        // Track which MIDI notes we're pasting
+        const pastedMidiNotes = this.clipboard.map(item => item.midiNote);
+        
+        console.log('Pasting notes:', pastedMidiNotes, 'to bar', targetBarIdx, 'mode:', mode);
+        console.log('Target bar before paste:', JSON.stringify(targetBar.chords));
+        
+        // Ensure we have a clean chord object
+        const hasEmptyChord = targetBar.chords.length > 0 && 
+                             targetBar.chords[0] && 
+                             (!targetBar.chords[0].midiNotes || targetBar.chords[0].midiNotes.length === 0);
+        
+        if (mode === 'replace' || targetBar.chords.length === 0 || !targetBar.chords[0] || hasEmptyChord) {
+            // Create fresh chord object (clears any "?" symbols)
+            console.log('Creating fresh chord object');
+            targetBar.chords = [{
+                symbol: '',
+                root: '',
+                quality: '',
+                midiNotes: [],
+                noteNames: []
+            }];
+        } else {
+            // For merge with existing notes
+            console.log('Merging with existing chord');
+            const existingChord = targetBar.chords[0];
+            if (!existingChord.midiNotes) existingChord.midiNotes = [];
+            if (!existingChord.noteNames) existingChord.noteNames = [];
+        }
+        
         const targetChord = targetBar.chords[0];
+        const chordIdx = 0;
         
         // Add all copied notes
         this.clipboard.forEach(item => {
             if (!targetChord.midiNotes.includes(item.midiNote)) {
                 targetChord.midiNotes.push(item.midiNote);
-                targetChord.noteNames.push(item.noteName);
             }
         });
         
-        // Sort and recognize chord
+        // Sort MIDI notes
         targetChord.midiNotes.sort((a, b) => a - b);
-        targetChord.symbol = this.recognizeChord(targetChord.midiNotes);
+        
+        // Rebuild noteNames array from sorted MIDI notes
+        targetChord.noteNames = targetChord.midiNotes.map(m => this.midiToNote(m));
+        
+        console.log('Before recognition - MIDI notes:', targetChord.midiNotes);
+        console.log('Before recognition - Note names:', targetChord.noteNames);
+        
+        // Recognize chord
+        const recognizedSymbol = this.recognizeChord(targetChord.midiNotes);
+        targetChord.symbol = recognizedSymbol;
+        
+        console.log('Chord recognized:', recognizedSymbol, 'from MIDI notes:', targetChord.midiNotes);
         
         this.pasteTargetBar = null;
+        
+        // Clear selection BEFORE rebuilding
+        this.selectedNotes.clear();
+        
         this.buildGrid();
         this.analyzeProgression();
         
-        console.log('Pasted', this.clipboard.length, 'notes');
+        // Sync chord designer with pasted bar
+        this.syncChordBuilderFromBar(targetBarIdx);
+        this.selectBar(targetBarIdx);
+        
+        // Switch to edit mode if not already
+        if (!this.editMode) {
+            this.toggleEditMode();
+            console.log('Switched to Edit Mode for note selection');
+        }
+        
+        // Select ONLY the pasted notes (after DOM update)
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                // Remove all visual selection first
+                document.querySelectorAll('.note-block.selected').forEach(block => {
+                    block.classList.remove('selected');
+                });
+                
+                // Select only notes that were in the clipboard
+                document.querySelectorAll(`.note-block[data-bar-index="${targetBarIdx}"]`).forEach(block => {
+                    const midi = parseInt(block.dataset.midi);
+                    
+                    // Only select if this MIDI note was in the clipboard
+                    if (pastedMidiNotes.includes(midi)) {
+                        const key = `${block.dataset.midi}-${block.dataset.barIndex}-${block.dataset.chordIndex}`;
+                        this.selectedNotes.add(key);
+                        block.classList.add('selected');
+                        console.log('Selected pasted note:', key);
+                    }
+                });
+                
+                console.log('✅ Pasted and selected', this.selectedNotes.size, 'notes');
+                console.log('✅ Edit mode active - use arrow keys to move, Delete to remove');
+                console.log('✅ Chord Designer synced to bar', targetBarIdx + 1);
+                console.log('selectedNotes:', Array.from(this.selectedNotes));
+            });
+        });
     }
 
     selectAllNotes() {
@@ -1359,6 +1966,128 @@ class ChordProgressionApp {
             block.classList.remove('selected');
         });
         this.selectedNotes.clear();
+    }
+
+    updateNoteSelection() {
+        // First, remove all selected classes
+        document.querySelectorAll('.note-block').forEach(block => {
+            block.classList.remove('selected');
+        });
+        
+        // Then, add selected class to all notes in selectedNotes Set
+        this.selectedNotes.forEach(noteKey => {
+            const [midi, barIdx, chordIdx] = noteKey.split('-').map(Number);
+            
+            // Find the note block with matching data attributes
+            const selector = `.note-block[data-midi="${midi}"][data-bar-index="${barIdx}"][data-chord-index="${chordIdx}"]`;
+            const noteBlock = document.querySelector(selector);
+            
+            if (noteBlock) {
+                noteBlock.classList.add('selected');
+            }
+        });
+        
+        console.log('Updated selection:', this.selectedNotes.size, 'notes selected');
+        
+        // Update interval analysis
+        this.updateIntervalAnalysis();
+    }
+
+    updateIntervalAnalysis() {
+        const intervalType = document.querySelector('.interval-type');
+        const intervalSemitones = document.querySelector('.interval-semitones');
+        const melodicInfo = document.getElementById('melodicInfo');
+        
+        console.log('updateIntervalAnalysis called, selected notes:', this.selectedNotes.size);
+        
+        if (!intervalType || !intervalSemitones || !melodicInfo) {
+            console.log('Interval analysis elements not found!');
+            return;
+        }
+        
+        if (this.selectedNotes.size === 0) {
+            intervalType.textContent = '-';
+            intervalSemitones.textContent = '-';
+            melodicInfo.textContent = 'Select notes to see interval analysis';
+            return;
+        }
+        
+        // Get MIDI notes from selection
+        const midiNotes = Array.from(this.selectedNotes).map(key => {
+            const [midi] = key.split('-').map(Number);
+            return midi;
+        }).sort((a, b) => a - b);
+        
+        // Also update the "Current Selection" in Music Theory Analysis panel
+        const selectionAnalysis = document.getElementById('selectionAnalysis');
+        
+        if (midiNotes.length === 1) {
+            const noteName = this.midiToNote(midiNotes[0]);
+            intervalType.textContent = noteName.replace(/\d+/, '');
+            intervalSemitones.textContent = `MIDI: ${midiNotes[0]}`;
+            melodicInfo.textContent = `Single note: ${noteName}`;
+            
+            if (selectionAnalysis) {
+                selectionAnalysis.innerHTML = `<strong>Selected Notes:</strong> ${noteName}`;
+            }
+            console.log('Updated interval display:', noteName, 'MIDI:', midiNotes[0]);
+        } else if (midiNotes.length === 2) {
+            const interval = midiNotes[1] - midiNotes[0];
+            const intervalName = this.getIntervalName(interval);
+            intervalType.textContent = intervalName;
+            intervalSemitones.textContent = `${interval} semitones`;
+            
+            const note1 = this.midiToNote(midiNotes[0]);
+            const note2 = this.midiToNote(midiNotes[1]);
+            melodicInfo.textContent = `Dyad: ${note1} → ${note2}\nInterval: ${intervalName}`;
+            
+            if (selectionAnalysis) {
+                selectionAnalysis.innerHTML = `<strong>Selected Notes:</strong> ${note1}, ${note2}<br><strong>Interval:</strong> ${intervalName}`;
+            }
+        } else {
+            // Multiple notes - show as chord
+            const root = this.midiToNote(midiNotes[0]).replace(/\d+/, '');
+            const intervals = midiNotes.map(n => (n - midiNotes[0]) % 12);
+            intervalType.textContent = `${midiNotes.length} notes`;
+            intervalSemitones.textContent = `Intervals: ${intervals.join(', ')}`;
+            
+            const noteNames = midiNotes.map(m => this.midiToNote(m).replace(/\d+/, '')).join(', ');
+            const noteNamesFull = midiNotes.map(m => this.midiToNote(m)).join(', ');
+            melodicInfo.textContent = `Notes: ${noteNames}\nRoot: ${root}\nIntervals from root: ${intervals.join(', ')} semitones`;
+            
+            if (selectionAnalysis) {
+                const chordSymbol = this.recognizeChord(midiNotes);
+                const notesList = noteNamesFull.split(', ').join(', ');
+                selectionAnalysis.innerHTML = `
+                    <strong>Chord:</strong> ${chordSymbol}<br><br>
+                    <strong>Notes:</strong> ${notesList}<br><br>
+                    <strong>Intervals from root:</strong><br>
+                    ${intervals.map((int, idx) => {
+                        const intervalName = this.getIntervalName(int);
+                        return `${noteNames.split(', ')[idx]}: ${intervalName}`;
+                    }).join('<br>')}
+                `;
+            }
+        }
+    }
+
+    getIntervalName(semitones) {
+        const intervals = {
+            0: 'Unison',
+            1: 'Minor 2nd',
+            2: 'Major 2nd',
+            3: 'Minor 3rd',
+            4: 'Major 3rd',
+            5: 'Perfect 4th',
+            6: 'Tritone',
+            7: 'Perfect 5th',
+            8: 'Minor 6th',
+            9: 'Major 6th',
+            10: 'Minor 7th',
+            11: 'Major 7th',
+            12: 'Octave'
+        };
+        return intervals[semitones] || `${semitones} semitones`;
     }
 
     handleContextMenu(e) {
@@ -1560,7 +2289,12 @@ class ChordProgressionApp {
     async play() {
         await Tone.start();
         this.isPlaying = true;
-        this.currentBar = Math.max(0, this.loopStart - 1); // Start from loop start
+        // Start from selected bar if set, otherwise from loop start
+        if (this.selectedBar !== null) {
+            this.currentBar = this.selectedBar;
+        } else {
+            this.currentBar = Math.max(0, this.loopStart - 1);
+        }
         Tone.Transport.bpm.value = this.bpm;
         
         const barDuration = (60 / this.bpm) * 4;
@@ -1574,6 +2308,7 @@ class ChordProgressionApp {
         this.playheadElement.style.display = 'block';
         
         this.playStartTime = performance.now();
+        this.playStartBar = this.currentBar; // Remember which bar we started from
         this.animatePlayhead(startPos, barWidth, totalDuration);
         
         const playBar = () => {
@@ -1587,39 +2322,62 @@ class ChordProgressionApp {
             const bar = this.progression[this.currentBar];
             const chordDuration = barDuration / bar.chords.length;
             
-            // Highlight current bar and its notes
+            // Highlight current bar
             this.highlightBar(this.currentBar);
-            this.highlightCurrentBarNotes(this.currentBar);
             
-            bar.chords.forEach((chord, idx) => {
-                setTimeout(() => {
-                    if (chord && chord.midiNotes) {
-                        if (this.arpEnabled) {
-                            this.playArpeggio(chord.midiNotes, chordDuration);
-                        } else {
-                            const freqs = chord.midiNotes.map(m => Tone.Frequency(m, 'midi').toFrequency());
-                            // Play for FULL duration - notes sustain until next chord/bar
-                            this.synth.triggerAttackRelease(freqs, chordDuration);
+            // If multiple chords in bar, highlight per sub-chord
+            if (bar.chords.length > 1) {
+                bar.chords.forEach((chord, chordIdx) => {
+                    setTimeout(() => {
+                        // Highlight only notes from this sub-chord
+                        this.highlightSubChordNotes(this.currentBar, chordIdx);
+                        
+                        if (chord && chord.midiNotes) {
+                            if (this.arpEnabled) {
+                                this.playArpeggio(chord.midiNotes, chordDuration);
+                            } else {
+                                const freqs = chord.midiNotes.map(m => Tone.Frequency(m, 'midi').toFrequency());
+                                this.synth.triggerAttackRelease(freqs, chordDuration);
+                            }
                         }
-                    }
-                }, idx * chordDuration * 1000);
-            });
-            
-            this.currentBar++;
-            
-            // Check if we should loop
-            const loopEndBar = Math.min(this.loopEnd, this.progression.length);
-            
-            if (this.currentBar >= loopEndBar) {
-                if (this.loopEnabled) {
-                    this.currentBar = Math.max(0, this.loopStart - 1); // Loop back to loop start
-                    setTimeout(playBar, barDuration * 1000);
-                } else {
-                    this.stop(); // Stop at loop end
-                }
+                    }, chordIdx * chordDuration * 1000);
+                });
             } else {
-                setTimeout(playBar, barDuration * 1000);
+                // Single chord - highlight all notes in bar
+                this.highlightCurrentBarNotes(this.currentBar);
+                
+                bar.chords.forEach((chord, chordIdx) => {
+                    setTimeout(() => {
+                        if (chord && chord.midiNotes) {
+                            if (this.arpEnabled) {
+                                this.playArpeggio(chord.midiNotes, chordDuration);
+                            } else {
+                                const freqs = chord.midiNotes.map(m => Tone.Frequency(m, 'midi').toFrequency());
+                                this.synth.triggerAttackRelease(freqs, chordDuration);
+                            }
+                        }
+                    }, chordIdx * chordDuration * 1000);
+                });
             }
+            
+            // Wait for the FULL bar duration (all sub-chords) before moving to next bar
+            setTimeout(() => {
+                this.currentBar++;
+                
+                // Check if we should loop
+                const loopEndBar = Math.min(this.loopEnd, this.progression.length);
+                
+                if (this.currentBar >= loopEndBar) {
+                    if (this.loopEnabled) {
+                        this.currentBar = Math.max(0, this.loopStart - 1); // Loop back to loop start
+                        playBar();
+                    } else {
+                        this.stop(); // Stop at loop end
+                    }
+                } else {
+                    playBar();
+                }
+            }, barDuration * 1000);
         };
         
         playBar();
@@ -1708,30 +2466,47 @@ class ChordProgressionApp {
         const animate = (currentTime) => {
             if (!this.isPlaying) return;
             
-            const elapsed = (currentTime - this.playStartTime) / 1000;
-            const loopDuration = ((this.loopEnd - this.loopStart + 1) / this.progression.length) * totalDuration;
-            let progress = elapsed / loopDuration;
-            
-            // Loop the playhead if loop is enabled
-            if (this.loopEnabled && progress >= 1) {
-                this.playStartTime = currentTime; // Reset start time
-                progress = 0;
-            } else {
-                progress = Math.min(progress, 1);
-            }
-            
             const gridContainer = document.getElementById('gridContainer');
             const gridRect = gridContainer.getBoundingClientRect();
             const currentStartPos = gridRect.left + 80;
             
-            // Calculate position within loop range
-            const loopStartPos = currentStartPos + ((this.loopStart - 1) * barWidth);
-            const loopWidth = (this.loopEnd - this.loopStart + 1) * barWidth;
-            const position = loopStartPos + (progress * loopWidth);
+            // Calculate which bar we're currently on and progress within that bar
+            const barDuration = (60 / this.bpm) * 4;
+            const elapsed = (currentTime - this.playStartTime) / 1000;
+            
+            // Calculate total bars played from start
+            const totalBarsPlayed = elapsed / barDuration;
+            const currentBarOffset = Math.floor(totalBarsPlayed);
+            const progressInCurrentBar = totalBarsPlayed - currentBarOffset;
+            
+            // Calculate actual bar index considering loop
+            let actualBar = this.playStartBar + currentBarOffset;
+            
+            // Handle looping
+            if (this.loopEnabled) {
+                const loopLength = this.loopEnd - this.loopStart + 1;
+                const barsFromLoopStart = actualBar - (this.loopStart - 1);
+                if (barsFromLoopStart >= loopLength) {
+                    // Reset to loop start
+                    const loopsCompleted = Math.floor(barsFromLoopStart / loopLength);
+                    actualBar = (this.loopStart - 1) + (barsFromLoopStart % loopLength);
+                    
+                    // If we just looped, reset the start time
+                    if (Math.floor((elapsed - barDuration * 0.01) / barDuration) !== currentBarOffset) {
+                        this.playStartTime = currentTime - (progressInCurrentBar * barDuration * 1000);
+                        this.playStartBar = this.loopStart - 1;
+                    }
+                }
+            }
+            
+            // Calculate playhead position
+            const barPosition = currentStartPos + (actualBar * barWidth);
+            const position = barPosition + (progressInCurrentBar * barWidth);
             
             this.playheadElement.style.left = position + 'px';
             
-            if (progress < 1 || this.loopEnabled) {
+            // Continue animation if playing
+            if (this.isPlaying) {
                 this.playheadAnimationId = requestAnimationFrame(animate);
             }
         };
@@ -1858,12 +2633,29 @@ class ChordProgressionApp {
             note.classList.remove('playing');
         });
         
-        // Highlight all notes in current bar
-        if (barIndex >= 0 && barIndex < this.progression.length) {
-            document.querySelectorAll(`.note-block[data-bar-index="${barIndex}"]`).forEach(note => {
+        // Highlight notes in current bar
+        document.querySelectorAll('.note-block').forEach(note => {
+            if (parseInt(note.dataset.barIndex) === barIndex) {
                 note.classList.add('playing');
-            });
-        }
+            }
+        });
+    }
+    
+    highlightSubChordNotes(barIndex, chordIndex) {
+        // Remove previous highlights (but not arp highlights)
+        document.querySelectorAll('.note-block.playing:not(.arp-playing)').forEach(note => {
+            note.classList.remove('playing');
+        });
+        
+        // Highlight only notes from this specific sub-chord
+        document.querySelectorAll('.note-block').forEach(note => {
+            const noteBarIdx = parseInt(note.dataset.barIndex);
+            const noteChordIdx = parseInt(note.dataset.chordIndex);
+            
+            if (noteBarIdx === barIndex && noteChordIdx === chordIndex) {
+                note.classList.add('playing');
+            }
+        });
     }
 
     highlightArpNote(midiNote) {
@@ -1992,6 +2784,7 @@ class ChordProgressionApp {
     }
 
     addBar() {
+        this.saveState();
         this.progression.push({
             barNum: this.progression.length + 1,
             chords: []
@@ -2005,8 +2798,7 @@ class ChordProgressionApp {
             alert('Cannot delete the last bar!');
             return;
         }
-        if (!confirm(`Delete bar ${index + 1}?`)) return;
-        
+        this.saveState();
         this.progression.splice(index, 1);
         // Renumber bars
         this.progression.forEach((bar, i) => {
@@ -2014,6 +2806,185 @@ class ChordProgressionApp {
         });
         this.buildGrid();
         this.analyzeProgression();
+    }
+    
+    clearBarNotes(index) {
+        this.saveState();
+        const bar = this.progression[index];
+        bar.chords = [];
+        this.buildGrid();
+        this.analyzeProgression();
+        console.log(`Cleared notes from bar ${index + 1}`);
+    }
+    
+    splitBar(barIndex) {
+        this.saveState();
+        const bar = this.progression[barIndex];
+        
+        // Add a new empty chord to the bar
+        bar.chords.push({
+            symbol: '-',
+            root: 'C',
+            quality: '',
+            midiNotes: [],
+            noteNames: []
+        });
+        
+        this.buildGrid();
+        this.analyzeProgression();
+        console.log(`Split bar ${barIndex + 1}, now has ${bar.chords.length} sub-chords`);
+    }
+    
+    deleteSubBar(barIndex, chordIndex) {
+        if (this.progression[barIndex].chords.length <= 1) {
+            alert('Cannot delete the last sub-chord in a bar');
+            return;
+        }
+        
+        this.saveState();
+        const bar = this.progression[barIndex];
+        
+        // Remove the chord at chordIndex
+        bar.chords.splice(chordIndex, 1);
+        
+        // Reset selection if deleted chord was selected
+        if (this.selectedBar === barIndex && this.selectedChordIndex === chordIndex) {
+            this.selectedChordIndex = 0;
+        }
+        
+        this.buildGrid();
+        this.analyzeProgression();
+        console.log(`Deleted sub-chord ${chordIndex} from bar ${barIndex + 1}`);
+    }
+
+    copyBar(index) {
+        const bar = this.progression[index];
+        if (!bar) return;
+        
+        // Copy all notes from all chords in this bar
+        this.clipboard = [];
+        bar.chords.forEach(chord => {
+            if (chord && chord.midiNotes) {
+                chord.midiNotes.forEach((midi, noteIdx) => {
+                    this.clipboard.push({
+                        midiNote: midi,
+                        noteName: chord.noteNames[noteIdx]
+                    });
+                });
+            }
+        });
+        
+        console.log(`Copied bar ${index + 1} (${this.clipboard.length} notes)`);
+        
+        // Visual feedback
+        const cell = document.querySelectorAll('.chord-cell')[index];
+        if (cell) {
+            cell.style.animation = 'copyFlash 0.3s';
+            setTimeout(() => {
+                cell.style.animation = '';
+            }, 300);
+        }
+    }
+
+    selectBar(index) {
+        this.selectedBar = index;
+        this.selectedChordIndex = 0; // Default to first chord
+        
+        // Update visual feedback
+        document.querySelectorAll('.chord-cell').forEach((cell, idx) => {
+            if (idx === index) {
+                cell.style.border = '3px solid #00d4ff';
+            } else {
+                cell.style.border = '';
+            }
+        });
+        
+        // Sync chord builder
+        this.syncChordBuilderFromBar(index);
+    }
+    
+    selectSubBar(barIndex, chordIndex) {
+        this.selectedBar = barIndex;
+        this.selectedChordIndex = chordIndex;
+        
+        // Update visual feedback for bar
+        document.querySelectorAll('.chord-cell').forEach((cell, idx) => {
+            if (idx === barIndex) {
+                cell.style.border = '3px solid #00d4ff';
+            } else {
+                cell.style.border = '';
+            }
+        });
+        
+        // Update visual feedback for sub-bars
+        document.querySelectorAll('.sub-bar').forEach(subBar => {
+            const barIdx = parseInt(subBar.dataset.barIndex);
+            const chordIdx = parseInt(subBar.dataset.chordIndex);
+            
+            if (barIdx === barIndex && chordIdx === chordIndex) {
+                subBar.classList.add('selected-sub-bar');
+                subBar.style.background = 'rgba(0, 212, 255, 0.2)';
+                subBar.style.border = '2px solid #00d4ff';
+            } else {
+                subBar.classList.remove('selected-sub-bar');
+                subBar.style.background = '';
+                subBar.style.border = '1px solid #333';
+            }
+        });
+        
+        // Sync chord builder with selected sub-chord
+        this.syncChordBuilderFromBar(barIndex, chordIndex);
+        
+        // Preview the chord
+        const bar = this.progression[barIndex];
+        if (bar && bar.chords[chordIndex]) {
+            this.previewChord(bar.chords[chordIndex]);
+        }
+    }
+
+    editChordText(barIndex, cellElement) {
+        const bar = this.progression[barIndex];
+        const currentText = bar.chords.map(c => c.symbol).join(' ') || '';
+        
+        // Create input element
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentText;
+        input.style.cssText = 'width: 100%; background: #1a1a1a; color: white; border: 2px solid #00d4ff; padding: 0.5rem; font-size: 1rem; text-align: center;';
+        
+        // Replace cell content temporarily
+        const originalContent = cellElement.innerHTML;
+        cellElement.innerHTML = '';
+        cellElement.appendChild(input);
+        input.focus();
+        input.select();
+        
+        const finishEdit = () => {
+            const newChordText = input.value.trim();
+            
+            if (newChordText) {
+                // Parse the new chord(s)
+                this.saveState();
+                const chords = this.parseChordSymbols(newChordText.split(/\s+/));
+                bar.chords = chords;
+                
+                // Rebuild grid to show changes
+                this.buildGrid();
+                this.analyzeProgression();
+            } else {
+                // Restore original if empty
+                cellElement.innerHTML = originalContent;
+            }
+        };
+        
+        input.addEventListener('blur', finishEdit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                finishEdit();
+            } else if (e.key === 'Escape') {
+                cellElement.innerHTML = originalContent;
+            }
+        });
     }
 
     transpose(semitones) {
@@ -2053,6 +3024,109 @@ class ChordProgressionApp {
         }
         
         this.buildGrid();
+    }
+
+    moveSelectedNotes(barOffset, semitoneOffset) {
+        if (this.selectedNotes.size === 0) return;
+        
+        this.saveState();
+        
+        // Collect notes to move
+        const notesToMove = [];
+        this.selectedNotes.forEach(noteKey => {
+            const [midi, barIdx, chordIdx] = noteKey.split('-').map(Number);
+            notesToMove.push({ midi, barIdx, chordIdx });
+        });
+        
+        // Clear selection temporarily
+        this.selectedNotes.clear();
+        
+        // Remove old notes and collect new positions
+        const newNotes = [];
+        notesToMove.forEach(({ midi, barIdx, chordIdx }) => {
+            const bar = this.progression[barIdx];
+            if (!bar) return;
+            
+            const chord = bar.chords[chordIdx];
+            if (!chord) return;
+            
+            // Remove note from old position
+            const noteIndex = chord.midiNotes.indexOf(midi);
+            if (noteIndex !== -1) {
+                chord.midiNotes.splice(noteIndex, 1);
+                chord.noteNames.splice(noteIndex, 1);
+                
+                if (chord.midiNotes.length === 0) {
+                    bar.chords.splice(chordIdx, 1);
+                } else {
+                    // Re-sort and update
+                    chord.midiNotes.sort((a, b) => a - b);
+                    chord.noteNames = chord.midiNotes.map(m => this.midiToNote(m));
+                    chord.symbol = this.recognizeChord(chord.midiNotes);
+                }
+                
+                // Calculate new position
+                const newBarIdx = barIdx + barOffset;
+                const newMidi = Math.max(0, Math.min(127, midi + semitoneOffset));
+                
+                // Check if new bar exists
+                if (newBarIdx >= 0 && newBarIdx < this.progression.length) {
+                    newNotes.push({ midi: newMidi, barIdx: newBarIdx });
+                }
+            }
+        });
+        
+        // Add notes at new positions and track new note keys
+        const newNoteKeys = [];
+        newNotes.forEach(({ midi, barIdx }) => {
+            const bar = this.progression[barIdx];
+            let chordIdx = 0;
+            
+            if (bar.chords.length === 0) {
+                // Create new chord
+                const noteName = this.midiToNote(midi);
+                bar.chords = [{
+                    symbol: noteName, // Full note name WITH octave for single notes
+                    root: '',
+                    quality: '',
+                    midiNotes: [midi],
+                    noteNames: [noteName]
+                }];
+                chordIdx = 0;
+            } else {
+                // Add to first chord
+                const chord = bar.chords[0];
+                if (!chord.midiNotes.includes(midi)) {
+                    chord.midiNotes.push(midi);
+                }
+                // Always re-sort and re-recognize (even if note existed)
+                chord.midiNotes.sort((a, b) => a - b);
+                chord.noteNames = chord.midiNotes.map(m => this.midiToNote(m));
+                chord.symbol = this.recognizeChord(chord.midiNotes);
+                chordIdx = 0;
+            }
+            
+            // Track new note key for re-selection
+            newNoteKeys.push(`${midi}-${barIdx}-${chordIdx}`);
+        });
+        
+        this.buildGrid();
+        
+        // Re-select the moved notes at their new positions
+        newNoteKeys.forEach(key => this.selectedNotes.add(key));
+        this.updateNoteSelection(); // This calls updateIntervalAnalysis
+        
+        // Update chord builder for the target bar (real-time sync)
+        if (newNotes.length > 0) {
+            const targetBarIdx = newNotes[0].barIdx;
+            this.syncChordBuilderFromBar(targetBarIdx);
+            
+            // Also select that bar visually (AFTER buildGrid)
+            this.selectBar(targetBarIdx);
+        }
+        
+        // Analyze progression AFTER selection update
+        this.analyzeProgression();
     }
 
     // Suggestions Panel
@@ -2444,6 +3518,503 @@ class ChordProgressionApp {
         html += `<br><strong>Function in ${detectedKey.key} ${detectedKey.scale}:</strong> <span class="analysis-highlight">${roman}</span>`;
         
         analysis.innerHTML = html;
+    }
+
+    // Chord Designer Functions
+    updateChordDisplay() {
+        const root = document.getElementById('rootNoteSelect').value;
+        const activeBtn = document.querySelector('.quality-btn.active');
+        const quality = activeBtn ? activeBtn.dataset.quality : '';
+        const bassNote = document.getElementById('bassNoteSelect').value;
+        
+        let chordSymbol = root + quality;
+        if (bassNote) {
+            chordSymbol += '/' + bassNote;
+        }
+        
+        document.getElementById('chordDisplay').value = chordSymbol;
+    }
+
+    applyChordToSelectedBar() {
+        console.log('applyChordToSelectedBar called, selectedBar:', this.selectedBar);
+        
+        if (this.selectedBar === null || this.selectedBar === undefined) {
+            alert('Please select a bar first by clicking on a chord cell');
+            return;
+        }
+        
+        const root = document.getElementById('rootNoteSelect').value;
+        const activeBtn = document.querySelector('.quality-btn.active');
+        const quality = activeBtn ? activeBtn.dataset.quality : '';
+        const bassNote = document.getElementById('bassNoteSelect').value;
+        const octave = parseInt(document.getElementById('octaveSelect').value);
+        const inversion = parseInt(document.getElementById('inversionSelect').value);
+        
+        console.log('Applying chord:', root, quality, 'octave:', octave, 'inversion:', inversion);
+        
+        if (!root) {
+            alert('Please select a root note');
+            return;
+        }
+        
+        // Build chord symbol for MIDI conversion
+        const baseChordSymbol = root + quality;
+        
+        // Convert to MIDI notes
+        let midiNotes = this.chordSymbolToMidi(baseChordSymbol, octave);
+        
+        if (!midiNotes || midiNotes.length === 0) {
+            alert('Could not build chord');
+            return;
+        }
+        
+        // Apply inversion
+        if (inversion > 0 && midiNotes.length > inversion) {
+            for (let i = 0; i < inversion; i++) {
+                const lowestNote = midiNotes.shift();
+                midiNotes.push(lowestNote + 12); // Move to next octave
+            }
+            midiNotes.sort((a, b) => a - b);
+        }
+        
+        // Add bass note if specified
+        if (bassNote) {
+            const bassNoteMap = {
+                'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+                'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
+            };
+            const bassMidi = bassNoteMap[bassNote] + ((octave - 1) * 12); // One octave lower
+            if (!midiNotes.includes(bassMidi)) {
+                midiNotes.unshift(bassMidi);
+            }
+        }
+        
+        // Apply to selected bar and chord
+        this.saveState();
+        const bar = this.progression[this.selectedBar];
+        const chordIndex = this.selectedChordIndex || 0;
+        
+        // Build note names
+        const noteNames = midiNotes.map(m => this.midiToNote(m));
+        
+        // Build chord symbol with inversion notation
+        let chordSymbol = root + quality;
+        if (inversion === 1) {
+            chordSymbol += '/1';
+        } else if (inversion === 2) {
+            chordSymbol += '/2';
+        } else if (inversion === 3) {
+            chordSymbol += '/3';
+        }
+        
+        // Update only the selected chord within the bar
+        bar.chords[chordIndex] = {
+            symbol: chordSymbol,
+            root: root,
+            quality: quality,
+            midiNotes: midiNotes,
+            noteNames: noteNames
+        };
+        
+        // Play the chord notes
+        midiNotes.forEach(midi => this.playNote(midi));
+        
+        this.buildGrid();
+        this.analyzeProgression();
+        
+        // Force update chord designer display
+        document.getElementById('chordDisplay').value = recognizedSymbol;
+        
+        // Sync chord designer from the updated bar
+        this.syncChordBuilderFromBar(this.selectedBar);
+    }
+
+    chordSymbolToMidi(symbol, octave = 4) {
+        // Parse chord symbol and convert to MIDI notes
+        const noteMap = {
+            'C': 0, 'C#': 1, 'D': 2, 'D#': 3, 'E': 4, 'F': 5,
+            'F#': 6, 'G': 7, 'G#': 8, 'A': 9, 'A#': 10, 'B': 11
+        };
+        
+        // Extract root note
+        let root = symbol.match(/^[A-G]#?/)[0];
+        let quality = symbol.substring(root.length);
+        
+        const rootMidi = noteMap[root] + (octave * 12);
+        const notes = [rootMidi];
+        
+        // Add intervals based on quality
+        if (quality === '' || quality === 'maj') {
+            // Major: root, major 3rd, perfect 5th
+            notes.push(rootMidi + 4, rootMidi + 7);
+        } else if (quality === 'm') {
+            // Minor: root, minor 3rd, perfect 5th
+            notes.push(rootMidi + 3, rootMidi + 7);
+        } else if (quality === '7') {
+            // Dominant 7: root, major 3rd, perfect 5th, minor 7th
+            notes.push(rootMidi + 4, rootMidi + 7, rootMidi + 10);
+        } else if (quality === 'maj7') {
+            // Major 7: root, major 3rd, perfect 5th, major 7th
+            notes.push(rootMidi + 4, rootMidi + 7, rootMidi + 11);
+        } else if (quality === 'm7') {
+            // Minor 7: root, minor 3rd, perfect 5th, minor 7th
+            notes.push(rootMidi + 3, rootMidi + 7, rootMidi + 10);
+        } else if (quality === 'dim') {
+            // Diminished: root, minor 3rd, diminished 5th
+            notes.push(rootMidi + 3, rootMidi + 6);
+        } else if (quality === 'aug') {
+            // Augmented: root, major 3rd, augmented 5th
+            notes.push(rootMidi + 4, rootMidi + 8);
+        } else if (quality === 'sus4') {
+            // Sus4: root, perfect 4th, perfect 5th
+            notes.push(rootMidi + 5, rootMidi + 7);
+        } else if (quality === 'sus2') {
+            // Sus2: root, major 2nd, perfect 5th
+            notes.push(rootMidi + 2, rootMidi + 7);
+        }
+        
+        return notes;
+    }
+
+    syncChordBuilderFromBar(barIndex, chordIndex = 0) {
+        // Update chord designer UI based on selected bar and chord
+        const bar = this.progression[barIndex];
+        const inversionSelect = document.getElementById('inversionSelect');
+        
+        // Use selectedChordIndex if available
+        if (this.selectedChordIndex !== undefined) {
+            chordIndex = this.selectedChordIndex;
+        }
+        
+        if (!bar || !bar.chords || bar.chords.length === 0 || !bar.chords[chordIndex]) {
+            // Clear chord designer
+            document.getElementById('rootNoteSelect').value = 'C';
+            document.getElementById('chordDisplay').value = '-';
+            document.getElementById('bassNoteSelect').value = '';
+            document.getElementById('voicesDisplay').textContent = '3';
+            if (inversionSelect) {
+                inversionSelect.value = '0';
+                inversionSelect.style.color = '';
+            }
+            // Reset to Maj
+            document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.quality-btn[data-quality=""]')?.classList.add('active');
+            return;
+        }
+        
+        const chord = bar.chords[chordIndex];
+        
+        // Update voice count display
+        if (chord.midiNotes && chord.midiNotes.length > 0) {
+            document.getElementById('voicesDisplay').textContent = chord.midiNotes.length;
+            
+            // Update octave display (from lowest note)
+            const sortedNotes = [...chord.midiNotes].sort((a, b) => a - b);
+            const lowestNote = this.midiToNote(sortedNotes[0]);
+            const octave = lowestNote.match(/\d+/)[0];
+            document.getElementById('octaveDisplay').textContent = octave;
+            
+            // Update arpeggio display (lowest note with inversion)
+            const inversionLabel = chord.symbol.includes('/') ? chord.symbol.split('/')[1] : 'R';
+            document.getElementById('arpeggioDisplay').textContent = `${lowestNote} (${inversionLabel})`;
+        }
+        
+        // Handle single note (just root with octave)
+        if (chord.midiNotes && chord.midiNotes.length === 1) {
+            const fullNoteName = this.midiToNote(chord.midiNotes[0]); // e.g. "C4"
+            const noteName = fullNoteName.replace(/\d+/, ''); // e.g. "C"
+            const octave = fullNoteName.match(/\d+/)[0]; // e.g. "4"
+            
+            document.getElementById('rootNoteSelect').value = noteName;
+            document.getElementById('chordDisplay').value = fullNoteName; // Show with octave
+            // Clear quality buttons for single note
+            document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+            console.log('Synced single note:', fullNoteName);
+            return;
+        }
+        
+        // Try to extract root and quality from symbol
+        if (chord.symbol && chord.symbol !== '?') {
+            const match = chord.symbol.match(/^([A-G]#?)(.*)$/);
+            if (match) {
+                const root = match[1];
+                let quality = match[2];
+                
+                // Handle dyad intervals (e.g. "C min3", "G 5 (Perfect)")
+                if (quality.includes('min2') || quality.includes('maj2') || 
+                    quality.includes('min3') || quality.includes('maj3') ||
+                    quality.includes('min6') || quality.includes('maj6') ||
+                    quality.includes('min7') || quality.includes('maj7') ||
+                    quality.includes('5 (') || quality.includes('oct')) {
+                    // It's a dyad/interval - just show root
+                    document.getElementById('rootNoteSelect').value = root;
+                    document.getElementById('chordDisplay').value = chord.symbol;
+                    document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+                    console.log('Synced dyad/interval:', chord.symbol);
+                    return;
+                }
+                
+                // Update root dropdown
+                const rootSelect = document.getElementById('rootNoteSelect');
+                if (rootSelect) {
+                    rootSelect.value = root;
+                    console.log('Set root note to:', root, 'dropdown value:', rootSelect.value);
+                }
+                
+                // Update quality button
+                document.querySelectorAll('.quality-btn').forEach(b => b.classList.remove('active'));
+                const qualityBtn = document.querySelector(`.quality-btn[data-quality="${quality}"]`);
+                if (qualityBtn) {
+                    qualityBtn.classList.add('active');
+                } else {
+                    // Default to Maj if quality not found
+                    document.querySelector('.quality-btn[data-quality=""]')?.classList.add('active');
+                }
+                
+                // Detect inversion from chord symbol
+                let detectedInversion = 0;
+                if (chord.symbol.includes('/1')) {
+                    detectedInversion = 1;
+                } else if (chord.symbol.includes('/2')) {
+                    detectedInversion = 2;
+                } else if (chord.symbol.includes('/3')) {
+                    detectedInversion = 3;
+                }
+                
+                // Update inversion dropdown
+                if (inversionSelect) {
+                    inversionSelect.value = detectedInversion.toString();
+                    inversionSelect.style.color = ''; // Normal color when detected
+                }
+                
+                // Update chord display
+                document.getElementById('chordDisplay').value = chord.symbol;
+                
+                // Also update chord display via updateChordDisplay
+                this.updateChordDisplay();
+                
+                console.log('Synced chord designer:', root, quality, 'inversion:', detectedInversion);
+            }
+        }
+    }
+
+    // Step functions for quick navigation
+    stepArpeggio(direction) {
+        // Get current chord from selected bar
+        if (this.selectedBar === null || this.selectedBar === undefined) {
+            return;
+        }
+        
+        const bar = this.progression[this.selectedBar];
+        const chordIndex = this.selectedChordIndex || 0;
+        
+        if (!bar || !bar.chords || bar.chords.length === 0 || !bar.chords[chordIndex]) {
+            return;
+        }
+        
+        const chord = bar.chords[chordIndex];
+        if (!chord.midiNotes || chord.midiNotes.length === 0) {
+            return;
+        }
+        
+        // Get base chord intervals (without octave/inversion)
+        const sortedNotes = [...chord.midiNotes].sort((a, b) => a - b);
+        const baseRoot = sortedNotes[0] % 12; // C=0, C#=1, etc.
+        const intervals = sortedNotes.map(n => (n - sortedNotes[0]) % 12).filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+        
+        // Initialize state if needed
+        if (this.arpeggioState === undefined) {
+            this.arpeggioState = {
+                octave: 4,
+                inversion: 0,
+                noteIndex: 0
+            };
+        }
+        
+        const state = this.arpeggioState;
+        
+        // Step through inversions and octaves (not individual notes)
+        if (direction > 0) {
+            state.inversion++;
+            if (state.inversion >= intervals.length) {
+                state.inversion = 0;
+                state.octave++;
+                if (state.octave > 6) state.octave = 2; // Wrap around
+            }
+        } else {
+            state.inversion--;
+            if (state.inversion < 0) {
+                state.octave--;
+                if (state.octave < 2) state.octave = 6; // Wrap around
+                state.inversion = intervals.length - 1;
+            }
+        }
+        
+        // Build the chord with current inversion
+        let chordNotes = [...intervals];
+        for (let i = 0; i < state.inversion; i++) {
+            const lowest = chordNotes.shift();
+            chordNotes.push(lowest + 12);
+        }
+        chordNotes.sort((a, b) => a - b);
+        
+        // Build full chord MIDI notes
+        const fullChord = chordNotes.map(interval => baseRoot + state.octave * 12 + interval);
+        
+        // Get display name (lowest note)
+        const lowestNote = this.midiToNote(fullChord[0]);
+        const invLabel = state.inversion === 0 ? 'R' : state.inversion;
+        
+        // Update display
+        document.getElementById('arpeggioDisplay').textContent = `${lowestNote} (${invLabel})`;
+        
+        // Update the actual chord in the selected bar
+        this.saveState();
+        const noteNames = fullChord.map(m => this.midiToNote(m));
+        
+        // Build chord symbol with inversion notation
+        const rootNoteName = this.midiToNote(sortedNotes[0]).replace(/\d+/, ''); // Original root without octave
+        let chordSymbol = rootNoteName;
+        if (chord.quality) {
+            chordSymbol += chord.quality;
+        }
+        // Add inversion notation
+        if (state.inversion > 0) {
+            chordSymbol += `/${state.inversion}`;
+        }
+        
+        // Play chord FIRST (before rebuild)
+        fullChord.forEach(midi => this.playNote(midi));
+        
+        // Then update the chord data
+        bar.chords[chordIndex] = {
+            symbol: chordSymbol,
+            root: chord.root || '',
+            quality: chord.quality || '',
+            midiNotes: fullChord,
+            noteNames: noteNames
+        };
+        
+        // Rebuild grid and analyze
+        this.buildGrid();
+        this.analyzeProgression();
+        
+        // Sync chord designer
+        this.syncChordBuilderFromBar(this.selectedBar);
+    }
+
+    stepVoiceCount(direction) {
+        // Add or remove notes from the current chord
+        if (this.selectedBar === null || this.selectedBar === undefined) {
+            return;
+        }
+        
+        const bar = this.progression[this.selectedBar];
+        const chordIndex = this.selectedChordIndex || 0;
+        
+        if (!bar || !bar.chords || bar.chords.length === 0 || !bar.chords[chordIndex]) {
+            return;
+        }
+        
+        const chord = bar.chords[chordIndex];
+        if (!chord.midiNotes || chord.midiNotes.length === 0) {
+            return;
+        }
+        
+        this.saveState();
+        const sortedNotes = [...chord.midiNotes].sort((a, b) => a - b);
+        const root = sortedNotes[0];
+        
+        // Add or remove notes based on direction
+        let newNotes = [...sortedNotes];
+        
+        if (direction > 0 && newNotes.length < 7) {
+            // Add a note (extend the chord)
+            // Add the next interval in the scale (3rd, 5th, 7th, 9th, 11th, 13th)
+            const intervals = [0, 4, 7, 10, 14, 17, 21]; // Root, 3rd, 5th, 7th, 9th, 11th, 13th
+            const currentIntervals = newNotes.map(n => (n - root) % 12);
+            
+            // Find next interval to add
+            for (let interval of intervals) {
+                if (!currentIntervals.includes(interval % 12)) {
+                    const octaveAdjust = Math.floor(interval / 12) * 12;
+                    newNotes.push(root + (interval % 12) + octaveAdjust);
+                    break;
+                }
+            }
+            newNotes.sort((a, b) => a - b);
+        } else if (direction < 0 && newNotes.length > 1) {
+            // Remove the highest note
+            newNotes.pop();
+        }
+        
+        // Play chord FIRST
+        newNotes.forEach(midi => this.playNote(midi));
+        
+        // Update chord
+        const noteNames = newNotes.map(m => this.midiToNote(m));
+        const chordSymbol = this.recognizeChord(newNotes);
+        
+        bar.chords[chordIndex] = {
+            symbol: chordSymbol,
+            root: chord.root || '',
+            quality: chord.quality || '',
+            midiNotes: newNotes,
+            noteNames: noteNames
+        };
+        
+        // Update display
+        document.getElementById('voicesDisplay').textContent = newNotes.length;
+        
+        // Rebuild and sync
+        this.buildGrid();
+        this.analyzeProgression();
+        this.syncChordBuilderFromBar(this.selectedBar);
+    }
+
+    stepRootNote(direction) {
+        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const rootSelect = document.getElementById('rootNoteSelect');
+        const currentIndex = notes.indexOf(rootSelect.value);
+        const newIndex = (currentIndex + direction + notes.length) % notes.length;
+        rootSelect.value = notes[newIndex];
+        
+        // Update display
+        document.getElementById('rootDisplay').textContent = notes[newIndex];
+        
+        this.updateChordDisplay();
+        if (document.getElementById('chordLock').checked) {
+            this.applyChordToSelectedBar();
+        }
+    }
+
+    stepOctave(direction) {
+        const octaveSelect = document.getElementById('octaveSelect');
+        const current = parseInt(octaveSelect.value);
+        const newValue = Math.max(2, Math.min(6, current + direction));
+        octaveSelect.value = newValue;
+        
+        // Update display
+        document.getElementById('octaveDisplay').textContent = newValue;
+        
+        if (document.getElementById('chordLock').checked) {
+            this.applyChordToSelectedBar();
+        }
+    }
+
+    stepInversion(direction) {
+        const inversionSelect = document.getElementById('inversionSelect');
+        const current = parseInt(inversionSelect.value);
+        const newValue = Math.max(0, Math.min(3, current + direction));
+        inversionSelect.value = newValue;
+        
+        // Update display
+        const invLabels = ['0', '1', '2', '3'];
+        document.getElementById('inversionDisplay').textContent = invLabels[newValue];
+        
+        if (document.getElementById('chordLock').checked) {
+            this.applyChordToSelectedBar();
+        }
     }
 }
 

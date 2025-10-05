@@ -1,10 +1,9 @@
-<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chord Progression Studio</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
     <div class="app-container">
@@ -75,6 +74,189 @@
                     <button id="toggleEditMode" class="btn-secondary">✏️ Edit</button>
                     <button id="toggleOriginal" class="btn-secondary">📄 Original</button>
                     <button id="clearAll" class="btn-secondary">🗑️ Clear All</button>
+                </div>
+
+                <div class="section">
+                    <h3>Chord Designer</h3>
+                    <div class="chord-designer">
+                        <!-- Chord Display -->
+                        <div class="chord-display">
+                            <label>Chord</label>
+                            <input type="text" id="chordDisplay" readonly value="C">
+                        </div>
+                        
+                        <!-- Root Note Dropdown -->
+                        <div class="chord-param">
+                            <label>Root Note</label>
+                            <select id="rootNoteSelect" class="chord-dropdown">
+                                <option value="C">C</option>
+                                <option value="C#">C#</option>
+                                <option value="D">D</option>
+                                <option value="D#">D#</option>
+                                <option value="E">E</option>
+                                <option value="F">F</option>
+                                <option value="F#">F#</option>
+                                <option value="G">G</option>
+                                <option value="G#">G#</option>
+                                <option value="A">A</option>
+                                <option value="A#">A#</option>
+                                <option value="B">B</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Quality Buttons Grid -->
+                        <div class="quality-grid">
+                            <button class="quality-btn active" data-quality="">Maj</button>
+                            <button class="quality-btn" data-quality="m">Min</button>
+                            <button class="quality-btn" data-quality="sus2">Sus2</button>
+                            <button class="quality-btn" data-quality="sus4">Sus4</button>
+                            
+                            <button class="quality-btn" data-quality="5">5</button>
+                            <button class="quality-btn" data-quality="aug">Aug</button>
+                            <button class="quality-btn" data-quality="dim">Dim</button>
+                            <button class="quality-btn" data-quality="b5">♭5</button>
+                            
+                            <button class="quality-btn" data-quality="#5">#5</button>
+                            <button class="quality-btn" data-quality="6">6</button>
+                            <button class="quality-btn" data-quality="7">7</button>
+                            <button class="quality-btn" data-quality="maj7">maj7</button>
+                            
+                            <button class="quality-btn" data-quality="b9">♭9</button>
+                            <button class="quality-btn" data-quality="9">9</button>
+                            <button class="quality-btn" data-quality="#9">#9</button>
+                            <button class="quality-btn" data-quality="11">11</button>
+                            
+                            <button class="quality-btn" data-quality="#11">#11</button>
+                            <button class="quality-btn" data-quality="b13">♭13</button>
+                            <button class="quality-btn" data-quality="13">13</button>
+                        </div>
+                        
+                        <!-- Quick Controls -->
+                        <div class="chord-param" style="background: rgba(0,212,255,0.1); padding: 0.5rem; border-radius: 4px;">
+                            <label style="color: #00d4ff;">⚡ Quick Controls</label>
+                            <div style="display: grid; grid-template-columns: auto 1fr auto; gap: 0.5rem; align-items: center;">
+                                <!-- Root -->
+                                <span style="font-size: 0.8rem; color: #888;">Root:</span>
+                                <div style="display: flex; gap: 0.25rem;">
+                                    <button id="rootDown" class="step-btn-compact" title="Previous note">◄</button>
+                                    <button id="rootUp" class="step-btn-compact" title="Next note">►</button>
+                                </div>
+                                <span id="rootDisplay" style="font-size: 0.85rem; color: #00d4ff; min-width: 25px;">C</span>
+                                
+                                <!-- Voicing Step -->
+                                <span style="font-size: 0.8rem; color: #888;">Voicing:</span>
+                                <div style="display: flex; gap: 0.25rem;">
+                                    <button id="arpeggioDown" class="step-btn-compact" title="Previous voicing (inversion/octave)">◄</button>
+                                    <button id="arpeggioUp" class="step-btn-compact" title="Next voicing (inversion/octave)">►</button>
+                                </div>
+                                <span id="arpeggioDisplay" style="font-size: 0.85rem; color: #00d4ff; min-width: 35px;">C4</span>
+                                
+                                <!-- Voice Count -->
+                                <span style="font-size: 0.8rem; color: #888;">Voices:</span>
+                                <div style="display: flex; gap: 0.25rem;">
+                                    <button id="voicesDown" class="step-btn-compact" title="Fewer notes">◄</button>
+                                    <button id="voicesUp" class="step-btn-compact" title="More notes">►</button>
+                                </div>
+                                <span id="voicesDisplay" style="font-size: 0.85rem; color: #00d4ff; min-width: 35px;">3</span>
+                                
+                                <!-- Octave -->
+                                <span style="font-size: 0.8rem; color: #888;">Oct:</span>
+                                <div style="display: flex; gap: 0.25rem;">
+                                    <button id="octaveDown" class="step-btn-compact" title="Lower octave">◄</button>
+                                    <button id="octaveUp" class="step-btn-compact" title="Higher octave">►</button>
+                                </div>
+                                <span id="octaveDisplay" style="font-size: 0.85rem; color: #00d4ff; min-width: 25px;">4</span>
+                                
+                                <!-- Inversion -->
+                                <span style="font-size: 0.8rem; color: #888;">Inv:</span>
+                                <div style="display: flex; gap: 0.25rem;">
+                                    <button id="inversionDown" class="step-btn-compact" title="Previous inversion">◄</button>
+                                    <button id="inversionUp" class="step-btn-compact" title="Next inversion">►</button>
+                                </div>
+                                <span id="inversionDisplay" style="font-size: 0.85rem; color: #00d4ff; min-width: 25px;">0</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Octave (hidden dropdown for compatibility) -->
+                        <select id="octaveSelect" class="chord-dropdown" style="display: none;">
+                            <option value="2">2</option>
+                            <option value="3">3</option>
+                            <option value="4" selected>4</option>
+                            <option value="5">5</option>
+                            <option value="6">6</option>
+                        </select>
+                        
+                        <!-- Inversion (hidden dropdown for compatibility) -->
+                        <select id="inversionSelect" class="chord-dropdown" style="display: none;">
+                            <option value="0">Root Position</option>
+                            <option value="1">1st Inversion</option>
+                            <option value="2">2nd Inversion</option>
+                            <option value="3">3rd Inversion</option>
+                        </select>
+                        
+                        <!-- Bass Note -->
+                        <div class="chord-param">
+                            <label>Bass Note</label>
+                            <select id="bassNoteSelect" class="chord-dropdown">
+                                <option value="">None</option>
+                                <option value="C">C</option>
+                                <option value="C#">C#</option>
+                                <option value="D">D</option>
+                                <option value="D#">D#</option>
+                                <option value="E">E</option>
+                                <option value="F">F</option>
+                                <option value="F#">F#</option>
+                                <option value="G">G</option>
+                                <option value="G#">G#</option>
+                                <option value="A">A</option>
+                                <option value="A#">A#</option>
+                                <option value="B">B</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Scale -->
+                        <div class="chord-param">
+                            <label>Scale</label>
+                            <select id="scaleSelect" class="chord-dropdown">
+                                <option value="auto">Auto (Major (Ionian))</option>
+                                <option value="major">Major (Ionian)</option>
+                                <option value="minor">Natural Minor (Aeolian)</option>
+                                <option value="dorian">Dorian</option>
+                                <option value="phrygian">Phrygian</option>
+                                <option value="lydian">Lydian</option>
+                                <option value="mixolydian">Mixolydian</option>
+                                <option value="locrian">Locrian</option>
+                                <option value="harmonic-minor">Harmonic Minor</option>
+                                <option value="melodic-minor">Melodic Minor</option>
+                                <option value="pentatonic-major">Major Pentatonic</option>
+                                <option value="pentatonic-minor">Minor Pentatonic</option>
+                                <option value="blues">Blues</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Lock Toggle -->
+                        <div class="chord-lock">
+                            <label>
+                                <input type="checkbox" id="chordLock">
+                                <span>🔒 Lock to Piano Roll (Auto-sync)</span>
+                            </label>
+                        </div>
+                        
+                        <button id="applyChord" class="btn-primary" style="margin-top: 0.5rem; width: 100%;">Apply to Selected Bar</button>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>Interval Analysis</h3>
+                    <div class="interval-analysis">
+                        <div class="interval-display" id="intervalDisplay">
+                            <div class="interval-type">-</div>
+                            <div class="interval-semitones">-</div>
+                        </div>
+                        <div class="melodic-info" id="melodicInfo">
+                            Select notes to see interval analysis
+                        </div>
+                    </div>
                 </div>
 
                 <div class="section">
@@ -283,6 +465,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/midi-writer-js@2.1.4/build/index.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=23"></script>
 </body>
 </html>
