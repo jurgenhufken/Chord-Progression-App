@@ -16,8 +16,11 @@ class ChordProgressionApp {
         this.arpSpeed = '1/8';
         this.arpOctaves = 1;
         this.arpTrigger = 'retrigger';
-        this.arpMode = 'chord';
+        this.arpMode = 'run';  // Default to Run (Continuous)
         this.arpSequenceIndex = 0;
+        this.currentArpNote = null;  // Track current arp note for highlighting
+        this.arpVisualizer = true;  // Visualizer on by default
+        this.lastHitNote = null;  // Track last hit to prevent duplicates
         this.playheadElement = null;
         this.playheadAnimationId = null;
         this.playStartTime = 0;
@@ -205,6 +208,9 @@ class ChordProgressionApp {
             rulerBar.className = 'ruler-bar';
             rulerBar.textContent = i + 1;
             rulerBar.dataset.barIndex = i;
+            rulerBar.style.width = this.barWidth + 'px'; // Match grid bar width EXACTLY
+            rulerBar.style.minWidth = this.barWidth + 'px';
+            rulerBar.style.maxWidth = this.barWidth + 'px';
             
             // Click to paste or select
             rulerBar.addEventListener('click', () => {
@@ -221,10 +227,11 @@ class ChordProgressionApp {
     }
 
     setupSynth() {
-        // Create effects chain
+        // Create effects chain with more aggressive settings
         this.filter = new Tone.Filter({
-            frequency: 20000,
+            frequency: 5000,  // Start lower for more noticeable effect
             type: 'lowpass',
+            rolloff: -24,     // Steeper rolloff for more dramatic effect
             Q: 1
         });
         
@@ -239,14 +246,25 @@ class ChordProgressionApp {
             wet: 0
         });
         
-        // Create synth and connect to effects chain
+        // Create synth with richer harmonics for better filter response
         this.synth = new Tone.PolySynth(Tone.Synth, {
-            oscillator: { type: 'sine' },
+            oscillator: { 
+                type: 'triangle',  // Triangle = soft, warm sound (default)
+                partials: [1, 0.5, 0.3, 0.2]  // Add harmonics
+            },
             envelope: {
                 attack: 0.01,
                 decay: 0.1,
                 sustain: 0.9,
                 release: 0.3
+            },
+            filterEnvelope: {
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0.5,
+                release: 0.5,
+                baseFrequency: 200,
+                octaves: 4
             }
         });
         
@@ -271,8 +289,17 @@ class ChordProgressionApp {
         document.getElementById('volume').addEventListener('input', (e) => {
             this.synth.volume.value = (e.target.value - 100) * 0.5;
         });
+        document.getElementById('waveform')?.addEventListener('change', (e) => {
+            this.synth.set({ oscillator: { type: e.target.value } });
+        });
         document.getElementById('attack').addEventListener('input', (e) => {
             this.synth.set({ envelope: { attack: parseFloat(e.target.value) } });
+        });
+        document.getElementById('decay')?.addEventListener('input', (e) => {
+            this.synth.set({ envelope: { decay: parseFloat(e.target.value) } });
+        });
+        document.getElementById('sustain')?.addEventListener('input', (e) => {
+            this.synth.set({ envelope: { sustain: parseFloat(e.target.value) } });
         });
         document.getElementById('release').addEventListener('input', (e) => {
             this.synth.set({ envelope: { release: parseFloat(e.target.value) } });
@@ -351,6 +378,9 @@ class ChordProgressionApp {
         // Arpeggiator
         document.getElementById('arpEnabled')?.addEventListener('change', (e) => {
             this.arpEnabled = e.target.checked;
+        });
+        document.getElementById('arpVisualizer')?.addEventListener('change', (e) => {
+            this.arpVisualizer = e.target.checked;
         });
         document.getElementById('arpPattern')?.addEventListener('change', (e) => {
             this.arpPattern = e.target.value;
@@ -618,15 +648,20 @@ class ChordProgressionApp {
             };
         });
         
-        // Save original state
         this.originalProgression = JSON.parse(JSON.stringify(this.progression));
         this.isModified = false;
+        
+        // Auto-adjust loop range to match progression length
+        this.loopStart = 1;
+        this.loopEnd = this.progression.length;
+        document.getElementById('loopStart').value = this.loopStart;
+        document.getElementById('loopEnd').value = this.loopEnd;
         
         this.buildGrid();
         this.analyzeProgression();
         if (this.updateLoopSlider) this.updateLoopSlider();
     }
-
+    
     parseChord(symbol) {
         const rootMatch = symbol.match(/^([A-G][#b]?)/);
         if (!rootMatch) return null;
@@ -675,7 +710,9 @@ class ChordProgressionApp {
         
         const numBars = Math.max(this.progression.length, 1);
         
-        container.style.gridTemplateColumns = `80px repeat(${numBars}, 120px)`;
+        // FIXED bar width - never changes
+        this.barWidth = 120;
+        container.style.gridTemplateColumns = `80px repeat(${numBars}, ${this.barWidth}px)`;
         
         // Calculate actual note range
         let actualNumNotes = 0;
@@ -1255,8 +1292,6 @@ class ChordProgressionApp {
     }
 
     selectBarNotes(barIndex) {
-        if (!this.editMode) return;
-        
         // Deselect all first
         this.deselectAllNotes();
         
@@ -1265,6 +1300,8 @@ class ChordProgressionApp {
             block.classList.add('selected');
             this.selectedNotes.add(`${block.dataset.midi}-${block.dataset.barIndex}-${block.dataset.chordIndex}`);
         });
+        
+        console.log('Selected', this.selectedNotes.size, 'notes from bar', barIndex + 1);
     }
 
     setPasteTarget(barIndex) {
@@ -1561,7 +1598,8 @@ class ChordProgressionApp {
                             this.playArpeggio(chord.midiNotes, chordDuration);
                         } else {
                             const freqs = chord.midiNotes.map(m => Tone.Frequency(m, 'midi').toFrequency());
-                            this.synth.triggerAttackRelease(freqs, chordDuration * 0.9);
+                            // Play for FULL duration - notes sustain until next chord/bar
+                            this.synth.triggerAttackRelease(freqs, chordDuration);
                         }
                     }
                 }, idx * chordDuration * 1000);
@@ -1642,6 +1680,10 @@ class ChordProgressionApp {
                 setTimeout(() => {
                     const freq = Tone.Frequency(note, 'midi').toFrequency();
                     this.synth.triggerAttackRelease(freq, noteLength);
+                    // Trigger visualizer for this note
+                    if (this.arpVisualizer) {
+                        this.showArpHit(note);
+                    }
                 }, i * noteDuration * 1000);
             });
         } else {
@@ -1652,6 +1694,10 @@ class ChordProgressionApp {
                 setTimeout(() => {
                     const freq = Tone.Frequency(note, 'midi').toFrequency();
                     this.synth.triggerAttackRelease(freq, noteLength);
+                    // Trigger visualizer for this note
+                    if (this.arpVisualizer) {
+                        this.showArpHit(note);
+                    }
                 }, i * noteDuration * 1000);
                 this.arpSequenceIndex++;
             }
@@ -1693,6 +1739,90 @@ class ChordProgressionApp {
         this.playheadAnimationId = requestAnimationFrame(animate);
     }
 
+    showArpHit(midiNote) {
+        // === DEBUG ANALYSIS ===
+        const playheadRect = this.playheadElement.getBoundingClientRect();
+        const playheadLeft = playheadRect.left;
+        const playheadRight = playheadRect.right;
+        const playheadWidth = playheadRect.width;
+        const playheadCenterX = playheadLeft + (playheadWidth / 2);
+        
+        // Get Y position
+        const gridContainer = document.getElementById('gridContainer');
+        if (!gridContainer) return;
+        
+        let yPos;
+        const pianoCell = document.querySelector(`.piano-cell[data-midi="${midiNote}"]`);
+        
+        if (pianoCell) {
+            const cellRect = pianoCell.getBoundingClientRect();
+            yPos = cellRect.top + (cellRect.height / 2);
+        } else {
+            const gridRect = gridContainer.getBoundingClientRect();
+            yPos = gridRect.bottom - ((midiNote - 36) * 20) - 100;
+        }
+        
+        // Create marker - SMALLER and ON TOP of playhead
+        const size = 20; // Smaller = easier to see center
+        const markerLeft = playheadCenterX - (size / 2);
+        const markerRight = markerLeft + size;
+        const markerCenterX = markerLeft + (size / 2);
+        
+        // === ANALYSIS ===
+        const diff = markerCenterX - playheadCenterX;
+        console.group('🔍 ARP HIT DEBUG - ' + this.midiToNote(midiNote));
+        console.log('Playhead:');
+        console.log('  left:', playheadLeft.toFixed(2));
+        console.log('  right:', playheadRight.toFixed(2));
+        console.log('  width:', playheadWidth.toFixed(2));
+        console.log('  center:', playheadCenterX.toFixed(2));
+        console.log('Marker:');
+        console.log('  left:', markerLeft.toFixed(2));
+        console.log('  right:', markerRight.toFixed(2));
+        console.log('  size:', size);
+        console.log('  center:', markerCenterX.toFixed(2));
+        console.log('DIFFERENCE:', diff.toFixed(2), 'px');
+        if (Math.abs(diff) < 0.1) {
+            console.log('✅ PERFECT ALIGNMENT!');
+        } else if (diff > 0) {
+            console.log('❌ Marker is', diff.toFixed(2), 'px to the RIGHT');
+        } else {
+            console.log('❌ Marker is', Math.abs(diff).toFixed(2), 'px to the LEFT');
+        }
+        console.groupEnd();
+        
+        // Create marker - NO MARGINS, NO PADDING, NO OFFSETS
+        const marker = document.createElement('div');
+        marker.className = 'arp-hit-marker';
+        marker.style.position = 'fixed';
+        marker.style.top = (yPos - size/2) + 'px';
+        marker.style.left = markerLeft + 'px';
+        marker.style.width = size + 'px';
+        marker.style.height = size + 'px';
+        marker.style.margin = '0';
+        marker.style.padding = '0';
+        marker.style.border = 'none';
+        marker.style.background = 'radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,215,0,1) 30%, rgba(255,69,0,1) 70%, transparent 100%)';
+        marker.style.zIndex = '10000';
+        marker.style.boxShadow = '0 0 30px rgba(255,215,0,1), 0 0 60px rgba(255,165,0,0.8)';
+        marker.style.borderRadius = '50%';
+        marker.style.animation = 'arpBurst 0.3s ease-out';
+        marker.style.pointerEvents = 'none';
+        marker.style.boxSizing = 'border-box';
+        
+        document.body.appendChild(marker);
+        
+        // Auto-remove after animation
+        const removeTimer = setTimeout(() => {
+            if (marker.parentNode) {
+                marker.remove();
+            }
+        }, 300);
+        
+        // Store timer for cleanup
+        marker.dataset.removeTimer = removeTimer;
+    }
+
     stop() {
         this.isPlaying = false;
         this.currentBar = 0;
@@ -1704,6 +1834,15 @@ class ChordProgressionApp {
             this.playheadAnimationId = null;
         }
         
+        // Remove all arp hit markers immediately
+        document.querySelectorAll('.arp-hit-marker').forEach(marker => {
+            // Clear any pending remove timers
+            if (marker.dataset.removeTimer) {
+                clearTimeout(parseInt(marker.dataset.removeTimer));
+            }
+            marker.remove();
+        });
+        
         this.playheadElement.style.display = 'none';
     }
 
@@ -1714,8 +1853,8 @@ class ChordProgressionApp {
     }
 
     highlightCurrentBarNotes(barIndex) {
-        // Remove previous highlights
-        document.querySelectorAll('.note-block.playing').forEach(note => {
+        // Remove previous highlights (but not arp highlights)
+        document.querySelectorAll('.note-block.playing:not(.arp-playing)').forEach(note => {
             note.classList.remove('playing');
         });
         
@@ -1725,6 +1864,35 @@ class ChordProgressionApp {
                 note.classList.add('playing');
             });
         }
+    }
+
+    highlightArpNote(midiNote) {
+        if (!this.arpVisualizer) return;
+        
+        // Find the note block at the playhead position that matches this MIDI note
+        const gridContainer = document.getElementById('gridContainer');
+        if (!gridContainer) return;
+        
+        const playheadPos = parseFloat(this.playheadElement.style.left);
+        
+        // Find all note blocks with this MIDI note
+        document.querySelectorAll(`.note-block[data-midi="${midiNote}"]`).forEach(noteBlock => {
+            const noteRect = noteBlock.getBoundingClientRect();
+            const gridRect = gridContainer.getBoundingClientRect();
+            
+            const noteLeft = noteRect.left - gridRect.left;
+            const noteRight = noteRect.right - gridRect.left;
+            
+            // Check if playhead is over this note
+            if (playheadPos >= noteLeft && playheadPos <= noteRight) {
+                // Create explosion effect at playhead position
+                noteBlock.classList.add('arp-hit');
+                
+                setTimeout(() => {
+                    noteBlock.classList.remove('arp-hit');
+                }, 200);
+            }
+        });
     }
 
     clearHighlights() {
@@ -1742,7 +1910,85 @@ class ChordProgressionApp {
     }
 
     exportMidi() {
-        alert('MIDI Export coming soon!\n\nThis will export your progression as a .mid file.');
+        // Simple MIDI file builder (no external library needed)
+        const createMidiFile = () => {
+            const header = [0x4D, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, 0xE0];
+            const trackHeader = [0x4D, 0x54, 0x72, 0x6B];
+            
+            const events = [];
+            let time = 0;
+            const ticksPerBeat = 480;
+            const beatsPerBar = 4;
+            
+            // Add tempo event
+            const tempo = Math.round(60000000 / this.bpm);
+            events.push(0x00, 0xFF, 0x51, 0x03, (tempo >> 16) & 0xFF, (tempo >> 8) & 0xFF, tempo & 0xFF);
+            
+            // Add each bar's chords
+            this.progression.forEach((bar) => {
+                bar.chords.forEach((chord) => {
+                    if (chord && chord.midiNotes && chord.midiNotes.length > 0) {
+                        const chordsInBar = bar.chords.length;
+                        const duration = Math.round((beatsPerBar / chordsInBar) * ticksPerBeat);
+                        
+                        // Note ON for all notes in chord
+                        chord.midiNotes.forEach(midiNote => {
+                            events.push(0x00, 0x90, midiNote, 0x50); // Note ON
+                        });
+                        
+                        // Note OFF after duration
+                        const deltaTime = this.encodeVariableLength(duration);
+                        chord.midiNotes.forEach((midiNote, idx) => {
+                            if (idx === 0) {
+                                events.push(...deltaTime, 0x80, midiNote, 0x00);
+                            } else {
+                                events.push(0x00, 0x80, midiNote, 0x00);
+                            }
+                        });
+                    }
+                });
+            });
+            
+            // End of track
+            events.push(0x00, 0xFF, 0x2F, 0x00);
+            
+            // Track length
+            const trackLength = events.length;
+            const trackLengthBytes = [
+                (trackLength >> 24) & 0xFF,
+                (trackLength >> 16) & 0xFF,
+                (trackLength >> 8) & 0xFF,
+                trackLength & 0xFF
+            ];
+            
+            return new Uint8Array([...header, ...trackHeader, ...trackLengthBytes, ...events]);
+        };
+        
+        try {
+            const midiData = createMidiFile();
+            const blob = new Blob([midiData], { type: 'audio/midi' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'chord-progression.mid';
+            a.click();
+            URL.revokeObjectURL(url);
+            console.log('✅ MIDI exported!');
+        } catch (error) {
+            console.error('MIDI Export Error:', error);
+            alert('Error: ' + error.message);
+        }
+    }
+    
+    encodeVariableLength(value) {
+        const bytes = [];
+        bytes.unshift(value & 0x7F);
+        value >>= 7;
+        while (value > 0) {
+            bytes.unshift((value & 0x7F) | 0x80);
+            value >>= 7;
+        }
+        return bytes;
     }
 
     addBar() {

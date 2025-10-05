@@ -1,17 +1,18 @@
-# 🎵 Chord Progression Studio
+# Chord Progression Studio v3.0
 
-A professional web application for quickly creating, testing, and exporting chord progressions. Perfect for musicians who want to rapidly develop ideas and export them to their DAW.
+A comprehensive web-based chord progression tool for musicians, producers, and composers. Create, edit, analyze, and export chord progressions with an intuitive piano roll interface.
 
-![Version](https://img.shields.io/badge/version-3.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Status](https://img.shields.io/badge/status-stable-success.svg)
+![Version](https://img.shields.io/badge/version-3.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-## 🚀 SUPER EENVOUDIGE INSTALLATIE
+## Features
 
-### ⚡ Optie 1: Direct Openen (Geen Installatie!)
-1. **Download** of clone deze repository
-2. **Dubbelklik** op `index.html`
-3. **Klaar!** De app opent in je browser
+### Core Functionality
+- **Chord Parser**: Parse progressions from text format (`|Am|F|C|G|`, `|Am F|C G|`)
+- **Piano Roll Editor**: Visual note editing with drag-and-drop
+- **Real-time Playback**: High-quality audio synthesis with Tone.js
+- **MIDI Export**: Export to standard MIDI format for DAW integration
+- **Music Theory Analysis**: Automatic key detection, interval analysis, and chord suggestions
 
 ### 🌐 Optie 2: Met Lokale Server (Aanbevolen voor beste performance)
 ```bash
