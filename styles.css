@@ -395,10 +395,10 @@ input[type="range"] {
 
 /* Grid Container Wrapper - for horizontal scroll */
 .grid-wrapper {
+    position: relative;
     overflow-x: auto;
     overflow-y: hidden;
     max-width: 100%;
-    position: relative;
     background: #1a1a1a;
     flex: 1;
     min-height: 0;
@@ -1069,8 +1069,6 @@ input[type="range"] {
 /* Playhead */
 .playhead {
     position: fixed;
-    top: 0;
-    bottom: 0;
     width: 3px;
     background: #ff6b6b;
     box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
@@ -1562,6 +1560,19 @@ input[type="range"] {
     background: #0a0a0a;
     padding: 0.5rem;
     border-radius: 4px;
+    position: relative;
+}
+
+.drum-playhead {
+    position: absolute;
+    top: 0;
+    left: 80px; /* Start after drum labels */
+    width: 2px;
+    height: 100%;
+    background: #ff6b00;
+    z-index: 10;
+    pointer-events: none;
+    box-shadow: 0 0 10px rgba(255, 107, 0, 0.5);
 }
 
 .drum-grid-horizontal {
@@ -1597,7 +1608,7 @@ input[type="range"] {
 
 .drum-bar-number {
     flex: 0 0 auto;
-    width: calc(16 * 22px + 15 * 2px); /* 16 steps * step width + gaps */
+    width: var(--drum-bar-width, 240px); /* Default 2x zoom */
     text-align: center;
     color: #00d4ff;
     font-size: 0.75rem;
@@ -1608,14 +1619,15 @@ input[type="range"] {
     display: flex;
     gap: 2px;
     flex: 0 0 auto;
+    width: var(--drum-bar-width, 240px); /* Default 2x zoom */
 }
 
 .drum-step {
-    width: 20px;
+    flex: 1; /* Equal width distribution */
     height: 30px;
     background: #2a2a2a;
     border: 1px solid #444;
-    border-radius: 3px;
+    border-radius: 2px;
     cursor: pointer;
     transition: all 0.1s;
 }

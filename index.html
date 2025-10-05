@@ -3,7 +3,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chord Progression Studio</title>
-    <link rel="stylesheet" href="styles.css?v=30">
+    <link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body>
     <div class="app-container">
@@ -476,9 +476,24 @@
                             <button class="drum-action-btn" id="drumCopy">Copy Bar</button>
                             <button class="drum-action-btn" id="drumPaste">Paste Bar</button>
                             <button class="drum-action-btn" id="drumFillRange">Fill Range...</button>
+                            <button class="drum-action-btn" id="drumAutoFill">Auto-Fill All</button>
+                            <span style="color: #888; margin: 0 1rem;">|</span>
+                            <label style="color: #ccc; font-size: 0.85rem;">
+                                Zoom:
+                                <select id="drumZoom" style="background: #2a2a2a; color: white; border: 1px solid #555; padding: 0.25rem; border-radius: 4px;">
+                                    <option value="1">1x</option>
+                                    <option value="2" selected>2x</option>
+                                    <option value="3">3x</option>
+                                    <option value="4">4x</option>
+                                </select>
+                            </label>
+                            <label style="color: #ccc; font-size: 0.85rem; margin-left: 0.5rem;">
+                                <input type="checkbox" id="drumFollowPlayhead" checked> Follow Playhead
+                            </label>
                         </div>
                     </div>
                     <div class="drum-grid-wrapper">
+                        <div class="drum-playhead" id="drumPlayhead"></div>
                         <div id="drumGrid" class="drum-grid-horizontal">
                             <!-- Drum grid will be generated here -->
                         </div>
@@ -671,6 +686,6 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/midi-writer-js@2.1.4/build/index.js"></script>
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=31"></script>
 </body>
 </html>

@@ -31,6 +31,8 @@ class ChordProgressionApp {
         this.currentDrumStep = 0;
         this.drumClipboard = null;
         this.selectedDrumTrack = null; // For showing parameters
+        this.drumZoom = 2; // Default 2x zoom
+        this.drumFollowPlayhead = true;
         
         // Arpeggiator
         this.arpEnabled = false;
@@ -96,6 +98,7 @@ class ChordProgressionApp {
         this.setupEventListeners();
         this.parseChords();
         this.buildDrumGrid();
+        this.updateDrumZoom(); // Set initial zoom
         
         // Set loop button active by default
         const loopBtn = document.getElementById('loopBtn');
@@ -363,6 +366,18 @@ class ChordProgressionApp {
         document.getElementById('drumCopy')?.addEventListener('click', () => this.copyDrumBar());
         document.getElementById('drumPaste')?.addEventListener('click', () => this.pasteDrumBar());
         document.getElementById('drumFillRange')?.addEventListener('click', () => this.fillDrumRange());
+        document.getElementById('drumAutoFill')?.addEventListener('click', () => this.autoFillDrums());
+        
+        // Drum zoom
+        document.getElementById('drumZoom')?.addEventListener('change', (e) => {
+            this.drumZoom = parseInt(e.target.value);
+            this.updateDrumZoom();
+        });
+        
+        // Drum follow playhead
+        document.getElementById('drumFollowPlayhead')?.addEventListener('change', (e) => {
+            this.drumFollowPlayhead = e.target.checked;
+        });
         
         // Filter controls
         document.getElementById('filterCutoff')?.addEventListener('input', (e) => {
@@ -878,6 +893,7 @@ class ChordProgressionApp {
         document.getElementById('loopEnd').value = this.loopEnd;
         
         this.buildGrid();
+        this.buildDrumGrid(); // Rebuild drum grid to match new bar count
         this.analyzeProgression();
         if (this.updateLoopSlider) this.updateLoopSlider();
     }
@@ -977,6 +993,15 @@ class ChordProgressionApp {
         this.playheadElement.className = 'playhead';
         this.playheadElement.style.left = '80px';
         this.playheadElement.style.display = 'none';
+        
+        // Set playhead position based on grid wrapper
+        const gridWrapper = document.querySelector('.grid-wrapper');
+        if (gridWrapper) {
+            const rect = gridWrapper.getBoundingClientRect();
+            this.playheadElement.style.top = rect.top + 'px';
+            this.playheadElement.style.height = rect.height + 'px';
+        }
+        
         container.appendChild(this.playheadElement);
         
         // Build vertical ruler
@@ -2387,6 +2412,9 @@ class ChordProgressionApp {
             // Highlight current bar
             this.highlightBar(this.currentBar);
             
+            // Scroll drum sequencer to playhead
+            this.scrollDrumToPlayhead();
+            
             // Play drums for this bar
             this.playDrumPattern(this.currentBar, barDuration);
             
@@ -2667,6 +2695,12 @@ class ChordProgressionApp {
         this.isPlaying = false;
         this.currentBar = 0;
         this.synth.releaseAll();
+        
+        // Reset drum playhead
+        const drumPlayhead = document.getElementById('drumPlayhead');
+        if (drumPlayhead) {
+            drumPlayhead.style.left = '80px';
+        }
         this.clearHighlights();
         
         if (this.playheadAnimationId) {
@@ -2855,6 +2889,7 @@ class ChordProgressionApp {
             chords: []
         });
         this.buildGrid();
+        this.buildDrumGrid(); // Rebuild drum grid with new bar
         this.analyzeProgression();
     }
 
@@ -2865,11 +2900,27 @@ class ChordProgressionApp {
         }
         this.saveState();
         this.progression.splice(index, 1);
-        // Renumber bars
+        
+        // Delete corresponding drum pattern
+        delete this.drumPatterns[index];
+        
+        // Shift drum patterns down
+        const newPatterns = {};
+        Object.keys(this.drumPatterns).forEach(key => {
+            const barIdx = parseInt(key);
+            if (barIdx > index) {
+                newPatterns[barIdx - 1] = this.drumPatterns[barIdx];
+            } else if (barIdx < index) {
+                newPatterns[barIdx] = this.drumPatterns[barIdx];
+            }
+        });
+        this.drumPatterns = newPatterns;
+        
         this.progression.forEach((bar, i) => {
             bar.barNum = i + 1;
         });
         this.buildGrid();
+        this.buildDrumGrid(); // Rebuild drum grid
         this.analyzeProgression();
     }
     
@@ -4698,6 +4749,10 @@ class ChordProgressionApp {
         if (!pattern) return;
         
         const stepDuration = barDuration / 16; // 16 steps per bar
+        const barWidth = 120 * this.drumZoom;
+        
+        // Animate drum playhead
+        this.animateDrumPlayhead(barIndex, barDuration);
         
         // Play each drum track
         Object.keys(pattern).forEach(drumKey => {
@@ -4717,22 +4772,45 @@ class ChordProgressionApp {
                             }
                         }
                         
-                        // Highlight step
-                        this.highlightDrumStep(drumKey, stepIndex);
+                        // Highlight step with barIndex
+                        this.highlightDrumStep(drumKey, barIndex, stepIndex);
                     }, delay);
                 }
             });
         });
     }
     
-    highlightDrumStep(drum, step) {
+    animateDrumPlayhead(barIndex, barDuration) {
+        const playhead = document.getElementById('drumPlayhead');
+        if (!playhead) return;
+        
+        const barWidth = 120 * this.drumZoom;
+        const startPos = 80 + (barIndex * barWidth); // 80px = label width
+        
+        // Reset transition and set start position immediately
+        playhead.style.transition = 'none';
+        playhead.style.left = startPos + 'px';
+        
+        // Force reflow to ensure transition reset
+        playhead.offsetHeight;
+        
+        // Use CSS transition for smooth animation
+        playhead.style.transition = `left ${barDuration}s linear`;
+        
+        // Trigger animation on next frame
+        requestAnimationFrame(() => {
+            playhead.style.left = (startPos + barWidth) + 'px';
+        });
+    }
+    
+    highlightDrumStep(drum, barIndex, step) {
         // Remove previous highlights for this drum
         document.querySelectorAll(`.drum-step[data-drum="${drum}"].playing`).forEach(el => {
             el.classList.remove('playing');
         });
         
-        // Highlight current step
-        const stepEl = document.querySelector(`.drum-step[data-drum="${drum}"][data-step="${step}"]`);
+        // Highlight current step in current bar
+        const stepEl = document.querySelector(`.drum-step[data-drum="${drum}"][data-bar="${barIndex}"][data-step="${step}"]`);
         if (stepEl) {
             stepEl.classList.add('playing');
             
@@ -4792,6 +4870,47 @@ class ChordProgressionApp {
         
         this.updateDrumGrid();
         console.log(`Filled drum pattern from bar ${startBar + 1} to ${endBar + 1}`);
+    }
+    
+    autoFillDrums() {
+        const pattern = this.drumPatterns[0]; // Bar 1
+        
+        if (!pattern) {
+            alert('No drum pattern in bar 1 to copy!');
+            return;
+        }
+        
+        // Copy bar 1 to all bars
+        for (let i = 0; i < this.progression.length; i++) {
+            this.drumPatterns[i] = JSON.parse(JSON.stringify(pattern));
+        }
+        
+        this.updateDrumGrid();
+        console.log(`Auto-filled bar 1 pattern to all ${this.progression.length} bars`);
+    }
+    
+    updateDrumZoom() {
+        const barWidth = 120 * this.drumZoom; // Base 120px * zoom factor
+        const drumGrid = document.getElementById('drumGrid');
+        if (drumGrid) {
+            drumGrid.style.setProperty('--drum-bar-width', `${barWidth}px`);
+        }
+        console.log(`Drum zoom set to ${this.drumZoom}x (${barWidth}px per bar)`);
+    }
+    
+    scrollDrumToPlayhead() {
+        if (!this.drumFollowPlayhead || !this.isPlaying) return;
+        
+        const wrapper = document.querySelector('.drum-grid-wrapper');
+        if (!wrapper) return;
+        
+        const barWidth = 120 * this.drumZoom;
+        const scrollPos = this.currentBar * barWidth - (wrapper.clientWidth / 2) + (barWidth / 2);
+        
+        wrapper.scrollTo({
+            left: Math.max(0, scrollPos),
+            behavior: 'smooth'
+        });
     }
 }
 
