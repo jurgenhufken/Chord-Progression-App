@@ -4,20 +4,50 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chord Progression Studio</title>
-    <link rel="stylesheet" href="styles-new.css">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="app-container">
         <!-- Header -->
         <header class="header">
-            <h1>🎵 Chord Progression Studio</h1>
-            <div class="transport">
-                <button id="playBtn" class="btn-play">▶</button>
-                <button id="stopBtn" class="btn-stop">■</button>
-                <input type="number" id="bpmInput" value="120" min="60" max="200">
-                <span>BPM</span>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div class="toolbar">
+                    <div class="menu-item">
+                        <button class="menu-btn">File</button>
+                        <div class="dropdown-menu">
+                            <div class="menu-option" id="menuNew">📄 New</div>
+                            <div class="menu-option" id="menuOpen">📂 Open...</div>
+                            <div class="menu-option" id="menuSave">💾 Save</div>
+                            <div class="menu-option" id="menuSaveAs">💾 Save As...</div>
+                            <div class="menu-divider"></div>
+                            <div class="menu-option" id="menuExportMidi">🎵 Export MIDI</div>
+                        </div>
+                    </div>
+                    <div class="menu-item">
+                        <button class="menu-btn">Edit</button>
+                        <div class="dropdown-menu">
+                            <div class="menu-option" id="menuUndo">⏪ Undo <span class="shortcut">Ctrl+Z</span></div>
+                            <div class="menu-option" id="menuRedo">⏩ Redo <span class="shortcut">Ctrl+Y</span></div>
+                            <div class="menu-divider"></div>
+                            <div class="menu-option" id="menuCopy">📋 Copy <span class="shortcut">Ctrl+C</span></div>
+                            <div class="menu-option" id="menuPaste">📄 Paste <span class="shortcut">Ctrl+V</span></div>
+                            <div class="menu-option" id="menuDelete">🗑️ Delete <span class="shortcut">Del</span></div>
+                        </div>
+                    </div>
+                </div>
+                <h1>🎵 Chord Progression Studio</h1>
+                <div class="transport">
+                    <button id="playBtn" class="btn-play">▶</button>
+                    <button id="stopBtn" class="btn-stop">■</button>
+                    <button id="loopBtn" class="btn-loop" title="Loop">🔁</button>
+                    <input type="number" id="bpmInput" value="120" min="60" max="200">
+                    <span>BPM</span>
+                </div>
             </div>
         </header>
+        
+        <!-- Hidden file input for opening files -->
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
 
         <!-- Main Content -->
         <div class="main-content">
@@ -30,28 +60,210 @@
                 </div>
 
                 <div class="section">
-                    <h3>Controls</h3>
+                    <h3>View</h3>
+                    <button id="togglePianoRoll" class="btn-secondary">👁️ Piano Roll</button>
+                    <label>Range: 
+                        <select id="pianoRange">
+                            <option value="auto" selected>Auto (Smart)</option>
+                            <option value="full">Full (C0-C8)</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="section">
+                    <h3>Edit Mode</h3>
+                    <button id="toggleEditMode" class="btn-secondary">✏️ Edit</button>
+                    <button id="toggleOriginal" class="btn-secondary">📄 Original</button>
+                    <button id="clearAll" class="btn-secondary">🗑️ Clear All</button>
+                </div>
+
+                <div class="section">
+                    <h3>Bars</h3>
+                    <button id="addBar" class="btn-secondary">➕ Add Bar</button>
+                </div>
+
+                <div class="section">
+                    <h3>Transpose</h3>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button id="transposeDown12" class="btn-secondary" title="Down 1 octave">-12</button>
+                        <button id="transposeDown1" class="btn-secondary" title="Down 1 semitone">-1</button>
+                        <button id="transposeUp1" class="btn-secondary" title="Up 1 semitone">+1</button>
+                        <button id="transposeUp12" class="btn-secondary" title="Up 1 octave">+12</button>
+                    </div>
+                    <small style="color: #888;">Selected notes or all if none selected</small>
+                </div>
+
+                <div class="section">
+                    <h3>Arpeggiator</h3>
+                    <label>
+                        <input type="checkbox" id="arpEnabled"> Enable Arp
+                    </label>
+                    <label>Pattern:
+                        <select id="arpPattern">
+                            <option value="up">Up</option>
+                            <option value="down">Down</option>
+                            <option value="updown">Up-Down</option>
+                            <option value="random">Random</option>
+                        </select>
+                    </label>
+                    <label>Speed:
+                        <select id="arpSpeed">
+                            <option value="1/16">1/16</option>
+                            <option value="1/8" selected>1/8</option>
+                            <option value="1/4">1/4</option>
+                        </select>
+                    </label>
+                    <label>Octaves: <input type="number" id="arpOctaves" min="1" max="3" value="1" style="width: 50px;"></label>
+                    <label>Trigger:
+                        <select id="arpTrigger">
+                            <option value="retrigger">Retrigger</option>
+                            <option value="legato">Legato</option>
+                        </select>
+                    </label>
+                    <label>Mode:
+                        <select id="arpMode">
+                            <option value="chord">Per Chord</option>
+                            <option value="run">Run (Continuous)</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="section">
+                    <h3>Synth Controls</h3>
                     <label>Volume: <input type="range" id="volume" min="0" max="100" value="70"></label>
                     <label>Attack: <input type="range" id="attack" min="0" max="1" step="0.01" value="0.01"></label>
                     <label>Release: <input type="range" id="release" min="0" max="2" step="0.01" value="0.3"></label>
+                    <label>
+                        <input type="checkbox" id="notePreview" checked> Note Preview
+                    </label>
+                </div>
+
+                <div class="section">
+                    <h3>Filter</h3>
+                    <label>Cutoff: <input type="range" id="filterCutoff" min="20" max="20000" value="20000" step="10"></label>
+                    <label>Resonance: <input type="range" id="filterResonance" min="0" max="30" value="1" step="0.1"></label>
+                    <label>Type:
+                        <select id="filterType">
+                            <option value="lowpass">Lowpass</option>
+                            <option value="highpass">Highpass</option>
+                            <option value="bandpass">Bandpass</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="section">
+                    <h3>Effects</h3>
+                    <label>Delay: <input type="range" id="delayTime" min="0" max="1" value="0" step="0.01"></label>
+                    <label>Feedback: <input type="range" id="delayFeedback" min="0" max="0.9" value="0" step="0.01"></label>
+                    <label>Reverb: <input type="range" id="reverbWet" min="0" max="1" value="0" step="0.01"></label>
+                </div>
+
+                <div class="section">
+                    <h3>Loop Range</h3>
+                    <label>Start: <input type="number" id="loopStart" min="1" value="1" style="width: 50px;"></label>
+                    <label>End: <input type="number" id="loopEnd" min="1" value="4" style="width: 50px;"></label>
+                    <small style="color: #888;">Loop from bar X to bar Y</small>
                 </div>
 
                 <div class="section">
                     <h3>Export</h3>
                     <button id="exportMidi" class="btn-secondary">Export MIDI</button>
                 </div>
+                
+                <div class="section help-text">
+                    <h4>🎹 Edit Mode Shortcuts:</h4>
+                    <small>
+                        • Click cell to add note<br>
+                        • Click note to select<br>
+                        • Ctrl+Click for multi-select<br>
+                        • Delete to remove<br>
+                        • Ctrl+C to copy<br>
+                        • Ctrl+V to paste<br>
+                        • + button to add chord
+                    </small>
+                </div>
             </aside>
 
             <!-- Grid Area -->
             <main class="grid-area">
+                <!-- Loop Range Slider (Logic Pro style) -->
+                <div class="loop-slider-container">
+                    <div class="loop-slider-track" id="loopSliderTrack">
+                        <div class="loop-slider-range" id="loopSliderRange">
+                            <div class="loop-handle loop-handle-start" id="loopHandleStart"></div>
+                            <div class="loop-handle loop-handle-end" id="loopHandleEnd"></div>
+                        </div>
+                    </div>
+                    <div class="loop-slider-labels" id="loopSliderLabels"></div>
+                </div>
+                
+                <!-- Vertical Ruler (Bar Numbers) -->
+                <div class="vertical-ruler" id="verticalRuler"></div>
+                
                 <div id="gridContainer" class="grid-container">
                     <!-- Grid will be generated here -->
                 </div>
+                
+                <!-- Analysis Panel -->
+                <div class="analysis-panel" id="analysisPanel">
+                    <h3>🎼 Music Theory Analysis</h3>
+                    <div class="analysis-content">
+                        <div class="analysis-section">
+                            <h4>Current Selection:</h4>
+                            <div id="selectionAnalysis">Click a chord or select notes to analyze</div>
+                        </div>
+                        <div class="analysis-section">
+                            <h4>Progression Analysis:</h4>
+                            <div id="progressionAnalysis">Parse chords to see analysis</div>
+                        </div>
+                    </div>
+                </div>
             </main>
+        </div>
+
+        <!-- Context Menu -->
+        <div id="contextMenu" class="context-menu" style="display: none;">
+            <div class="context-menu-item" id="contextCut">✂️ Cut</div>
+            <div class="context-menu-item" id="contextCopy">📋 Copy</div>
+            <div class="context-menu-item" id="contextPaste">📄 Paste</div>
+            <div class="context-menu-divider"></div>
+            <div class="context-menu-item" id="contextDelete">🗑️ Delete</div>
+        </div>
+
+        <!-- Chord Suggestions Panel (Hidden by default) -->
+        <div id="suggestionsPanel" class="suggestions-panel" style="display: none;">
+            <div class="panel-header">
+                <h3>What's Next?</h3>
+                <button id="closeSuggestions" class="btn-close-panel">✕</button>
+            </div>
+            <div class="panel-content">
+                <div class="suggestion-section">
+                    <h4>Suggested Chords:</h4>
+                    <div id="chordSuggestions" class="suggestion-buttons">
+                        <!-- Suggestions will be generated here -->
+                    </div>
+                </div>
+                <div class="suggestion-section">
+                    <h4>Build Your Own:</h4>
+                    <div class="chord-builder">
+                        <label>Bass Note:</label>
+                        <div id="bassNotes" class="note-buttons">
+                            <!-- Bass notes will be generated here -->
+                        </div>
+                        <label>Chord Type:</label>
+                        <div id="chordTypes" class="type-buttons">
+                            <!-- Chord types will be generated here -->
+                        </div>
+                        <button id="previewBuilding" class="btn-preview" style="margin-top: 1rem; width: 100%;">
+                            ▶ Preview Chord
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-    <script src="app-new.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>

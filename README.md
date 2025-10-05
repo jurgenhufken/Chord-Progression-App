@@ -2,25 +2,70 @@
 
 A professional web application for quickly creating, testing, and exporting chord progressions. Perfect for musicians who want to rapidly develop ideas and export them to their DAW.
 
-![Version](https://img.shields.io/badge/version-2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-3.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Status](https://img.shields.io/badge/status-stable-success.svg)
 
-## ✨ Features
+## 🚀 SUPER EENVOUDIGE INSTALLATIE
+
+### ⚡ Optie 1: Direct Openen (Geen Installatie!)
+1. **Download** of clone deze repository
+2. **Dubbelklik** op `index.html`
+3. **Klaar!** De app opent in je browser
+
+### 🌐 Optie 2: Met Lokale Server (Aanbevolen voor beste performance)
+```bash
+# Optie A: Python (als je Python hebt)
+python -m http.server 8000
+
+# Optie B: Node.js (als je Node hebt)
+npx serve .
+
+# Optie C: VS Code Live Server
+# Rechtermuisknop op index.html → "Open with Live Server"
+```
+Dan open: `http://localhost:8000`
+
+### 📦 Wat je NIET nodig hebt:
+- ❌ Geen npm install
+- ❌ Geen build process
+- ❌ Geen dependencies installeren
+- ❌ Geen configuratie
+- ✅ **Gewoon 3 bestanden en het werkt!**
+
+## ✨ Features (Version 3.0)
 
 ### 🎹 Core Functionality
 - **Flexible Grid Layout**: Handle any number of bars (not limited to 8)
 - **Excel-like Interface**: Unified grid with perfect alignment
 - **Piano Roll**: Visual MIDI note display directly under chord grid
+- **Vertical Ruler**: Bar numbers for easy navigation and paste targets
 - **Real-time Playback**: Continuous note playback with smooth playhead
-- **MIDI Export**: Professional MIDI file export for DAW integration
+- **Loop Range**: Visual loop slider with adjustable start/end points
+- **Edit Mode**: Click, drag, box-select, copy/paste notes
+- **Context Menu**: Right-click for Cut, Copy, Paste, Delete
+- **Undo/Redo**: Full undo/redo support (Ctrl+Z/Ctrl+Y)
+
+### 💾 File Management
+- **Save/Load Projects**: Save as JSON, load anytime
+- **Professional Toolbar**: File and Edit menus with shortcuts
+- **Export MIDI**: Export to MIDI for DAW integration
 
 ### 🎛️ Audio Engine
-- **Soft Synthesizer**: Warm, non-intrusive sound
+- **Soft Synthesizer**: Warm, non-intrusive sound (Tone.js)
+- **Filter**: Lowpass/Highpass/Bandpass with cutoff and resonance
+- **Effects**: Delay and Reverb with wet/dry controls
 - **Full ADSR Controls**: Attack, Decay, Sustain, Release
-- **Continuous Playback**: Notes sustain for full duration
+- **Arpeggiator**: Up, Down, Up-Down, Random patterns with speed control
 - **BPM Control**: 60-200 BPM range
 - **Volume Control**: Real-time adjustment
+
+### 🎼 Music Theory Analysis
+- **Interval Analysis**: Recognize dyads and their harmonic qualities
+- **Chord Recognition**: Automatic chord detection from notes
+- **Key Detection**: Detect the key of your progression
+- **Roman Numeral Analysis**: See chord functions (I, IV, V, etc.)
+- **Use Case Suggestions**: Get suggestions for interval usage
 
 ### 🎨 Visual Feedback
 - **Smooth Playhead**: 60fps animation with perfect sync
@@ -106,10 +151,23 @@ chord-progression-app/
 └── .gitignore         # Git ignore rules
 ```
 
-## 🎮 Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
+### Playback
 - `Space`: Play/Pause
 - `Esc`: Stop playback
+
+### Edit Mode (✏️ button must be ON)
+- `Ctrl+Z`: Undo
+- `Ctrl+Y` or `Ctrl+Shift+Z`: Redo
+- `Ctrl+C`: Copy selected notes
+- `Ctrl+V`: Paste (then click ruler to paste location)
+- `Ctrl+A`: Select all notes
+- `Delete`: Delete selected notes
+- `Esc`: Deselect all
+
+### File Operations
+- Via toolbar: File → New, Open, Save, Save As, Export MIDI
 
 ## 🔧 Development
 
@@ -129,14 +187,28 @@ npx serve .
 
 ## 📝 Version History
 
-### Version 2.0 (Current - Stable)
+### Version 3.0 (Current - Stable) 🎉
+**Major Update - Professional Edition**
+- ✅ **File Management**: Save/Load projects as JSON
+- ✅ **Professional Toolbar**: File and Edit menus
+- ✅ **Undo/Redo**: Full history with Ctrl+Z/Ctrl+Y
+- ✅ **Vertical Ruler**: Bar numbers for navigation
+- ✅ **Loop Range Slider**: Visual loop control
+- ✅ **Context Menu**: Right-click for Cut/Copy/Paste/Delete
+- ✅ **Filter & Effects**: Lowpass/Highpass filter, Delay, Reverb
+- ✅ **Arpeggiator**: Multiple patterns and speeds
+- ✅ **Music Theory Analysis**: Intervals, chords, key detection
+- ✅ **Dyad Support**: 2-note intervals with harmonic analysis
+- ✅ **Transpose**: Transpose selected notes or entire song
+- ✅ **Box Selection**: Drag to select multiple notes
+- ✅ **Dynamic Piano Roll**: Auto-adjusts to note range
+
+### Version 2.0
 - ✅ Flexible grid layout (any number of bars)
 - ✅ Perfect alignment between chords and piano roll
 - ✅ Smooth playhead with 60fps animation
-- ✅ Playhead-driven note highlighting
 - ✅ Works with multiple chords per bar
 - ✅ MIDI export functionality
-- ✅ Professional UI design
 
 ## 🤝 Contributing
 

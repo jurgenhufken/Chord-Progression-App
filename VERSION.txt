@@ -1,22 +1,22 @@
-Chord Progression Studio - Version 2.0
-=======================================
+Chord Progression Studio - Version 3.0
+========================================
 
-Date: 2025-10-04
-Status: STABLE - WORKING VERSION
+Professional Edition - Major Update!
 
-Features:
----------
-✅ Flexible grid layout (any number of bars)
-✅ Excel-like unified grid
-✅ Piano roll directly under chord grid
-✅ Perfect alignment between chords and notes
-✅ Continuous note playback (full duration)
-✅ Soft, warm synthesizer sound
-✅ Full ADSR controls (Attack, Decay, Sustain, Release)
-✅ Smooth playhead animation (60fps)
-✅ Playhead-driven note highlighting
-✅ Works with multiple chords per bar
-✅ MIDI export functionality
+New in 3.0:
+- File Management (Save/Load JSON projects)
+- Professional Toolbar (File & Edit menus)
+- Undo/Redo (Ctrl+Z/Ctrl+Y)
+- Vertical Ruler for navigation
+- Loop Range Slider
+- Context Menu (Right-click)
+- Filter & Effects (lowpass/Highpass, Delay, Reverb)
+- Arpeggiator (Multiple patterns)
+- Music Theory Analysis
+- Dyad/Interval Support
+- Transpose functionality
+- Box Selection
+- Dynamic Piano Roll
 ✅ BPM control (60-200)
 ✅ Volume and sound controls
 ✅ Click bars to preview chords
