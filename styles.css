@@ -149,6 +149,8 @@ body {
 .main-content {
     display: flex;
     overflow: hidden;
+    flex: 1;
+    min-height: 0;
 }
 
 /* Sidebar */
@@ -233,7 +235,8 @@ input[type="range"] {
 /* Grid Area */
 .grid-area {
     flex: 1;
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
     padding: 1rem;
     background: #1a1a1a;
     display: flex;
@@ -571,12 +574,11 @@ input[type="range"] {
 /* Grid Container Wrapper - no scroll for 8 bars */
 .grid-wrapper {
     position: relative;
-    overflow-x: hidden;
-    overflow-y: hidden;
+    overflow: visible !important;
     max-width: 100%;
     background: #1a1a1a;
     flex: 1;
-    min-height: 0;
+    min-height: 600px;
     display: flex;
     flex-direction: column;
 }
@@ -588,11 +590,7 @@ input[type="range"] {
     position: relative;
     width: fit-content;
     min-width: 100%;
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
     margin-top: 0;
-    min-height: 0;
 }
 
 /* Scrollbar styling */
@@ -673,7 +671,7 @@ input[type="range"] {
 .grid-cell.grid-label {
     position: sticky;
     left: 0;
-    z-index: 6;
+    z-index: 11;
     background: #2a2a2a;
     font-weight: 600;
     display: flex;
@@ -686,7 +684,7 @@ input[type="range"] {
     position: sticky;
     top: 0;
     left: 0;
-    z-index: 10;
+    z-index: 15;
     background: #2a2a2a;
 }
 
@@ -707,15 +705,12 @@ input[type="range"] {
     min-height: 100px;
     width: var(--bar-width);
     max-width: var(--bar-width);
+    background: #1a1a1a;
     display: flex;
     flex-direction: column;
     align-items: stretch;
     justify-content: space-between;
     cursor: pointer;
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    background: #1a1a1a;
     transition: border 0.2s;
     padding: 0.3rem 0.2rem;
     gap: 0.25rem;
@@ -1094,10 +1089,13 @@ input[type="range"] {
 
 /* Piano Roll Cell */
 .piano-cell {
-    min-height: 16px;
-    height: 16px;
+    min-height: 20px !important;
+    height: 20px !important;
     position: relative;
     transition: background 0.1s ease-out;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 .piano-cell.white {

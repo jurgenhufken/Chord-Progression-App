@@ -1,18 +1,57 @@
-# Chord Progression Studio v3.0
+# 🎹 Chord Progression Studio v1.0
 
-A comprehensive web-based chord progression tool for musicians, producers, and composers. Create, edit, analyze, and export chord progressions with an intuitive piano roll interface.
+A professional DAW-style chord progression and music production application with advanced pattern sequencing, drum programming, and mixing capabilities.
 
-![Version](https://img.shields.io/badge/version-3.0-blue)
+![Version](https://img.shields.io/badge/version-1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-production-success)
 
-## Features
+## ✨ Features
 
-### Core Functionality
-- **Chord Parser**: Parse progressions from text format (`|Am|F|C|G|`, `|Am F|C G|`)
-- **Piano Roll Editor**: Visual note editing with drag-and-drop
-- **Real-time Playback**: High-quality audio synthesis with Tone.js
-- **MIDI Export**: Export to standard MIDI format for DAW integration
-- **Music Theory Analysis**: Automatic key detection, interval analysis, and chord suggestions
+### 🎼 Pattern System
+- **16 Patterns** organized in 4x4 matrix (A1-D4)
+- **8 bars per pattern** with automatic distribution
+- **Chain Mode** for seamless pattern playback
+- **Loop Chain** for continuous cycling through patterns
+- Visual feedback for filled patterns
+- Centralized bar numbering system
+
+### 🎹 Chord Progression Engine
+- Advanced chord parser supporting:
+  - Major, minor, sus2, sus4
+  - 7th, maj7, m7, dim7
+  - Diminished, augmented
+  - Add9, add11, 6th chords
+- Piano roll visualization with MIDI notes
+- Copy/paste functionality
+- Multiple chords per bar (sub-chords)
+- Default 32-bar progression included
+
+### 🥁 Drum Sequencer
+- **4 Tracks**: Kick, Snare, Hi-Hat, Clap
+- **16-step sequencer** per bar
+- **Random Beat Generator** with true randomness
+- Per-bar drum patterns
+- Visual step highlighting during playback
+- **MIDI Export** (General MIDI format)
+
+### 🎚️ Professional Mixer
+- 2-channel mixer (Piano + Drums)
+- **VU Meters** with gradient visualization (green→yellow→red)
+- **Horizontal faders** with dB range (-60 to +6 dB)
+- **Numeric dB input** fields (Ableton-style)
+- **Mute buttons** per channel
+- Real-time meter animation
+- Toggleable section at bottom of screen
+
+### 🎵 Audio Engine
+- Powered by **Tone.js**
+- Polyphonic synthesis for chords
+- Individual drum sounds
+- Seamless pattern switching (no audio glitches)
+- BPM control (60-200)
+- Volume control in dB
+- Arpeggiator support
 
 ### 🌐 Optie 2: Met Lokale Server (Aanbevolen voor beste performance)
 ```bash

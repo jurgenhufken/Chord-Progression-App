@@ -1133,6 +1133,9 @@ class ChordProgressionApp {
     }
 
     buildGrid() {
+        console.log('buildGrid() called, progression length:', this.progression.length);
+        console.log('showPianoRoll:', this.showPianoRoll);
+        
         const container = document.getElementById('gridContainer');
         container.innerHTML = '';
         
@@ -1187,9 +1190,12 @@ class ChordProgressionApp {
                 // Auto: smart range based on actual notes
                 minMidi = 127;
                 maxMidi = 0;
+                let hasNotes = false;
+                
                 this.progression.forEach(bar => {
                     bar.chords.forEach(chord => {
                         if (chord && chord.midiNotes) {
+                            hasNotes = true;
                             chord.midiNotes.forEach(note => {
                                 minMidi = Math.min(minMidi, note);
                                 maxMidi = Math.max(maxMidi, note);
@@ -1197,8 +1203,14 @@ class ChordProgressionApp {
                         }
                     });
                 });
-                minMidi = Math.max(0, minMidi - 6);
-                maxMidi = Math.min(127, maxMidi + 6);
+                
+                if (!hasNotes) {
+                    minMidi = 48; // C3
+                    maxMidi = 84; // C6
+                } else {
+                    minMidi = Math.max(0, minMidi - 6);
+                    maxMidi = Math.min(127, maxMidi + 6);
+                }
                 actualNumNotes = maxMidi - minMidi + 1;
             }
         }
@@ -1206,8 +1218,10 @@ class ChordProgressionApp {
         // Set grid rows (chord row + piano roll)
         if (this.showPianoRoll && actualNumNotes > 0) {
             container.style.gridTemplateRows = `80px repeat(${actualNumNotes}, 20px)`;
+            console.log('Grid rows set for piano roll:', actualNumNotes, 'notes');
         } else {
             container.style.gridTemplateRows = `80px`;
+            console.log('Grid rows set to chord only (no piano roll)');
         }
         
         // Universal Playhead - create once, spans entire viewport
@@ -1434,9 +1448,12 @@ class ChordProgressionApp {
                 // Find min and max MIDI notes in progression
                 minMidi = 127;
                 maxMidi = 0;
+                let hasNotes = false;
+                
                 this.progression.forEach(bar => {
                     bar.chords.forEach(chord => {
                         if (chord && chord.midiNotes) {
+                            hasNotes = true;
                             chord.midiNotes.forEach(note => {
                                 minMidi = Math.min(minMidi, note);
                                 maxMidi = Math.max(maxMidi, note);
@@ -1445,10 +1462,18 @@ class ChordProgressionApp {
                     });
                 });
                 
-                // Add padding
-                minMidi = Math.max(0, minMidi - 6);
-                maxMidi = Math.min(127, maxMidi + 6);
+                // If no notes found, use default range
+                if (!hasNotes) {
+                    console.log('No notes found in progression, using default range');
+                    minMidi = 48; // C3
+                    maxMidi = 84; // C6
+                } else {
+                    // Add padding
+                    minMidi = Math.max(0, minMidi - 6);
+                    maxMidi = Math.min(127, maxMidi + 6);
+                }
                 actualNumNotes = maxMidi - minMidi + 1;
+                console.log('Piano roll range:', minMidi, 'to', maxMidi, 'Notes:', actualNumNotes);
             }
             
             for (let noteIdx = 0; noteIdx < actualNumNotes; noteIdx++) {
