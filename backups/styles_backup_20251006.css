@@ -1511,25 +1511,12 @@ input[type="range"] {
     background: #00d4ff;
     color: #1a1a1a;
     border-color: #00d4ff;
-    font-weight: 600;
 }
 
 /* Drum Sequencer */
 .drum-sequencer {
     background: transparent;
     border: none;
-}
-
-.drum-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1rem;
-}
-
-.drum-header h3 {
-    margin: 0;
-    color: #00d4ff;
 }
 
 .drum-controls {
