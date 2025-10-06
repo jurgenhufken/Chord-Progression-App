@@ -1,4 +1,4 @@
-# 🎹 Chord Progression Studio v1.0
+# 🎹 Chord Progression Studio v1.0.1
 
 A professional DAW-style chord progression and music production application with advanced pattern sequencing, drum programming, and mixing capabilities.
 
