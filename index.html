@@ -47,15 +47,22 @@
         
         <!-- Hidden file input for opening files -->
         <input type="file" id="fileInput" accept=".json" style="display: none;">
-
         <!-- Main Content -->
         <div class="main-content">
             <!-- Left Sidebar -->
             <aside class="sidebar">
                 <div class="section">
-                    <h3>Chord Input</h3>
-                    <textarea id="chordInput" placeholder="|Am|F|C|G|">|Am|F|C|G|</textarea>
+                    <label for="chordInput">Chord Progression:</label>
+                    <textarea id="chordInput" placeholder="e.g., | Am | F | C | G |">| Am | Dm | Gsus4 G | C |
+| F | Dm | Bdim E7 | Am |
+| Am | F | Dsus4 D | G |
+| C | F | Gsus4 G | Am |
+| Am | Dm | Gsus4 G | C |
+| F | Dm | Bdim E7 | Am |
+| Am | F | Dsus4 D | G |
+| C | F | Gsus4 G | Am |</textarea>
                     <button id="parseBtn" class="btn-primary">Parse</button>
+                    <button id="parseWithBeats" class="btn-primary">🎲 Parse + Beats</button>
                 </div>
 
                 <div class="section">
@@ -68,15 +75,39 @@
                         </select>
                     </label>
                     <label style="margin-top: 0.5rem;">
-                        <input type="checkbox" id="followPlayhead" checked> 🎯 Follow Playhead
+                        <input type="checkbox" id="followPlayhead"> 🎯 Follow Playhead
+                    </label>
+                        <input type="checkbox" id="linkScroll" checked> 🔗 Link Scroll
                     </label>
                 </div>
 
                 <div class="section">
-                    <h3>Edit Mode</h3>
-                    <button id="toggleEditMode" class="btn-secondary">✏️ Edit</button>
-                    <button id="toggleOriginal" class="btn-secondary">📄 Original</button>
-                    <button id="clearAll" class="btn-secondary">🗑️ Clear All</button>
+                    <button id="copyBar" class="btn-secondary">Copy Bar</button>
+                    <button id="pasteBar" class="btn-secondary">Paste Bar</button>
+                    <button id="fillRange" class="btn-secondary">Fill Range</button>
+                    <button id="autoFillAll" class="btn-secondary">Auto-Fill All</button>
+                    <button id="exportDrumMidi" class="btn-secondary">💾 Export Drums MIDI</button>
+                </div>
+
+                <div class="section">
+                    <h3>Pattern Mode</h3>
+                    <button id="toggleSongMode" class="btn-secondary">🎵 Song Mode</button>
+{{ ... }}
+                    <label style="margin-top: 0.5rem;">
+                        <input type="checkbox" id="chainPatterns" checked> 🔗 Chain Patterns
+                    </label>
+                    <label style="margin-top: 0.5rem;">
+                        <input type="checkbox" id="loopChain" checked> 🔁 Loop Chain
+                    </label>
+                    <label style="margin-top: 0.5rem;">
+                        <input type="checkbox" id="autoRandomBeats"> 🎲 Random Beats
+                    </label>
+                    <div id="patternMatrix" class="pattern-matrix">
+                        <!-- 4x4 pattern grid will be generated here -->
+                    </div>
+                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #888;">
+                        Current: <span id="currentPatternLabel">A1</span>
+                    </div>
                 </div>
 
                 <div class="section">
@@ -469,7 +500,7 @@
                 <!-- Drum Sequencer -->
                 <div class="drum-sequencer" id="drumSequencer">
                     <div class="drum-header">
-                        <h3>🥁 Drum Sequencer</h3>
+                        <h3 style="cursor: pointer;" onclick="app.toggleSection('drumContent')">🥁 Drum Sequencer <span id="drumToggle">▼</span></h3>
                         <div class="drum-controls">
                             <button class="drum-preset-btn" data-pattern="basic">Basic</button>
                             <button class="drum-preset-btn" data-pattern="funk">Funk</button>
@@ -491,14 +522,15 @@
                                 </select>
                             </label>
                             <label style="color: #ccc; font-size: 0.85rem; margin-left: 0.5rem;">
-                                <input type="checkbox" id="drumFollowPlayhead" checked> Follow Playhead
+                                <input type="checkbox" id="drumFollowPlayhead"> Follow Playhead
                             </label>
                         </div>
                     </div>
-                    <div class="drum-grid-wrapper">
-                        <div class="drum-playhead" id="drumPlayhead"></div>
-                        <div id="drumGrid" class="drum-grid-horizontal">
-                            <!-- Drum grid will be generated here -->
+                    <div id="drumContent">
+                        <div class="drum-grid-wrapper">
+                            <div id="drumGrid" class="drum-grid-horizontal">
+                                <!-- Drum grid will be generated here -->
+                            </div>
                         </div>
                     </div>
                     
@@ -530,6 +562,41 @@
                         <h4>🎚️ Drum Effects Routing</h4>
                         <div id="drumEffectsRouting" class="drum-effects-routing">
                             <!-- Effects routing will be generated here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mixer Section -->
+                <div class="mixer-bottom">
+                    <h3 style="cursor: pointer;" onclick="app.toggleSection('mixerContent')">🎚️ Mixer <span id="mixerToggle">▼</span></h3>
+                    <div id="mixerContent" class="mixer-container">
+                        <div class="mixer-channel">
+                            <div class="channel-label">PIANO</div>
+                            <div class="fader-section">
+                                <div class="meter-container">
+                                    <div class="meter" id="pianoMeter"></div>
+                                </div>
+                                <div class="fader-controls">
+                                    <input type="range" id="pianoVolume" class="fader" min="-60" max="6" value="-10" step="0.1">
+                                    <input type="number" id="pianoDb" class="db-input" min="-60" max="6" value="-10" step="0.1">
+                                    <span class="db-label">dB</span>
+                                </div>
+                            </div>
+                            <button id="mutePiano" class="mute-btn">M</button>
+                        </div>
+                        <div class="mixer-channel">
+                            <div class="channel-label">DRUMS</div>
+                            <div class="fader-section">
+                                <div class="meter-container">
+                                    <div class="meter" id="drumMeter"></div>
+                                </div>
+                                <div class="fader-controls">
+                                    <input type="range" id="drumVolume" class="fader" min="-60" max="6" value="-15" step="0.1">
+                                    <input type="number" id="drumDb" class="db-input" min="-60" max="6" value="-15" step="0.1">
+                                    <span class="db-label">dB</span>
+                                </div>
+                            </div>
+                            <button id="muteDrums" class="mute-btn">M</button>
                         </div>
                     </div>
                 </div>

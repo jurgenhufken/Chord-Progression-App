@@ -393,6 +393,173 @@ input[type="range"] {
 .analysis-success {
     color: #4CAF50;
 }
+/* Pattern Matrix */
+.pattern-matrix {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+/* Mixer */
+.mixer-bottom {
+    background: #1a1a1a;
+    border-top: 2px solid #333;
+    padding: 1rem;
+    margin-top: 1rem;
+}
+
+.mixer-bottom h3 {
+    color: #00d4ff;
+    margin: 0 0 1rem 0;
+    user-select: none;
+}
+
+.mixer-container {
+    display: flex;
+    gap: 2rem;
+    justify-content: center;
+    padding: 1rem 0;
+}
+
+.mixer-channel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    background: #1a1a1a;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid #333;
+    min-width: 180px;
+}
+
+.channel-label {
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #00d4ff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.fader-section {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.meter-container {
+    width: 24px;
+    height: 150px;
+    background: #0a0a0a;
+    border: 2px solid #333;
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+}
+
+.meter {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    height: 0%;
+    background: linear-gradient(to top, #00ff00 0%, #ffff00 50%, #ff0000 100%);
+    transition: height 0.05s ease-out;
+}
+
+.fader-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.fader {
+    width: 150px;
+    height: 8px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(to right, #333 0%, #00d4ff 50%, #ff4444 100%);
+    border-radius: 4px;
+    outline: none;
+    cursor: pointer;
+}
+
+.fader::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 24px;
+    background: #00d4ff;
+    border: 2px solid #fff;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.fader::-moz-range-thumb {
+    width: 16px;
+    height: 24px;
+    background: #00d4ff;
+    border: 2px solid #fff;
+    border-radius: 3px;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.db-input {
+    width: 60px;
+    padding: 0.3rem;
+    background: #0a0a0a;
+    border: 1px solid #444;
+    border-radius: 4px;
+    color: #00d4ff;
+    font-size: 0.85rem;
+    text-align: center;
+    font-weight: bold;
+}
+
+.db-label {
+    font-size: 0.75rem;
+    color: #888;
+}
+
+.mute-btn {
+    padding: 0.4rem 0.8rem;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #ccc;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.mute-btn:hover {
+    background: #333;
+    border-color: #666;
+}
+
+.mute-btn.active {
+    background: #ff4444;
+    border-color: #ff6666;
+    color: white;
+}
+
+.pattern-btn:hover {
+    background: #3a3a3a;
+    border-color: #00d4ff;
+}
+
+.pattern-btn.active {
+    background: #00d4ff;
+    color: #000;
+    font-weight: bold;
+}
+
+.pattern-btn.has-data {
+    border-color: #00d4ff;
+}
 
 /* UNIVERSAL GRID SYSTEM */
 :root {
@@ -401,10 +568,10 @@ input[type="range"] {
     --bar-gap: 0px;
 }
 
-/* Grid Container Wrapper - for horizontal scroll */
+/* Grid Container Wrapper - no scroll for 8 bars */
 .grid-wrapper {
     position: relative;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
     max-width: 100%;
     background: #1a1a1a;
@@ -413,7 +580,6 @@ input[type="range"] {
     display: flex;
     flex-direction: column;
 }
-
 /* Grid Container */
 .grid-container {
     display: grid;

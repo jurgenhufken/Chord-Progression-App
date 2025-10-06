@@ -31,8 +31,21 @@ class ChordProgressionApp {
         this.drumClipboard = null;
         this.selectedDrumTrack = null; // For showing parameters
         this.drumZoom = 2; // Default 2x zoom
-        this.drumFollowPlayhead = true; // Default to following playhead
-        this.followPlayhead = true; // Follow mode for chord grid
+        this.drumFollowPlayhead = false; // Default OFF
+        this.followPlayhead = false; // Follow mode OFF by default
+        this.linkScroll = true; // Link piano roll and drum sequencer scroll
+        
+        // Pattern system
+        this.patterns = {}; // { 'A1': { progression: [...], drumPatterns: {...}, notes: {...} } }
+        this.currentPattern = 'A1';
+        this.songMode = false; // false = pattern mode, true = song mode
+        this.chainPatterns = true; // Chain all filled patterns in sequence (default ON)
+        this.loopChain = true; // Loop back to first pattern after last (default ON)
+        this.autoRandomBeats = false; // Auto-generate random beats per pattern
+        this.mutePiano = false; // Mute piano/synth output
+        this.muteDrums = false; // Mute drum output
+        this.songArrangement = []; // ['A1', 'A2', 'B1', 'A1', ...]
+        this.currentSongStep = 0;
         this.arpEnabled = false;
         this.arpPattern = 'up';
         this.arpSpeed = '1/8';
@@ -94,6 +107,7 @@ class ChordProgressionApp {
     init() {
         this.setupSynth();
         this.setupEventListeners();
+        this.buildPatternMatrix();
         this.parseChords();
         this.buildDrumGrid();
         this.updateDrumZoom(); // Set initial zoom
@@ -235,7 +249,7 @@ class ChordProgressionApp {
         this.progression.forEach((bar, i) => {
             const rulerBar = document.createElement('div');
             rulerBar.className = 'ruler-bar';
-            rulerBar.textContent = i + 1;
+            rulerBar.textContent = bar.barNum;
             rulerBar.dataset.barIndex = i;
             rulerBar.style.width = this.barWidth + 'px'; // Match grid bar width EXACTLY
             rulerBar.style.minWidth = this.barWidth + 'px';
@@ -310,7 +324,24 @@ class ChordProgressionApp {
     }
 
     setupEventListeners() {
-        document.getElementById('parseBtn').addEventListener('click', () => this.parseChords());
+        document.getElementById('parseBtn')?.addEventListener('click', () => {
+            this.parseChords();
+        });
+        
+        document.getElementById('parseWithBeats')?.addEventListener('click', () => {
+            this.parseChords();
+            // Generate beats for all patterns
+            Object.keys(this.patterns).forEach(patternId => {
+                this.generateRandomBeatForPatternSilent(patternId);
+            });
+            // Load beats for current pattern
+            if (this.patterns[this.currentPattern]) {
+                this.drumPatterns = JSON.parse(JSON.stringify(this.patterns[this.currentPattern].drumPatterns));
+                this.buildDrumGrid();
+            }
+            console.log('Generated beats for all patterns');
+        });
+        
         document.getElementById('playBtn').addEventListener('click', () => this.togglePlay());
         document.getElementById('stopBtn').addEventListener('click', () => this.stop());
         document.getElementById('loopBtn').addEventListener('click', () => this.toggleLoop());
@@ -380,6 +411,104 @@ class ChordProgressionApp {
         
         document.getElementById('drumFollowPlayhead')?.addEventListener('change', (e) => {
             this.drumFollowPlayhead = e.target.checked;
+        });
+        
+        // Link scroll toggle
+        document.getElementById('linkScroll')?.addEventListener('change', (e) => {
+            this.linkScroll = e.target.checked;
+        });
+        
+        // Song mode toggle
+        document.getElementById('toggleSongMode')?.addEventListener('click', () => {
+            this.songMode = !this.songMode;
+            const btn = document.getElementById('toggleSongMode');
+            if (btn) {
+                btn.textContent = this.songMode ? '🎹 Pattern Mode' : '🎵 Song Mode';
+                btn.classList.toggle('active', this.songMode);
+            }
+            // Rebuild to apply scroll settings
+            this.buildGrid();
+            this.buildDrumGrid();
+            console.log('Song mode:', this.songMode);
+        });
+        
+        // Chain patterns toggle
+        document.getElementById('chainPatterns')?.addEventListener('change', (e) => {
+            this.chainPatterns = e.target.checked;
+            console.log('Chain patterns:', this.chainPatterns);
+        });
+        
+        // Loop chain toggle
+        document.getElementById('loopChain')?.addEventListener('change', (e) => {
+            this.loopChain = e.target.checked;
+            console.log('Loop chain:', this.loopChain);
+        });
+        
+        // Auto random beats toggle
+        document.getElementById('autoRandomBeats')?.addEventListener('change', (e) => {
+            this.autoRandomBeats = e.target.checked;
+            console.log('Auto random beats:', this.autoRandomBeats);
+            
+            if (this.autoRandomBeats) {
+                // Generate random beat for current pattern if it doesn't have one
+                this.generateRandomBeatForPattern(this.currentPattern);
+            }
+        });
+        
+        // Mute buttons
+        document.getElementById('mutePiano')?.addEventListener('click', (e) => {
+            this.mutePiano = !this.mutePiano;
+            e.target.classList.toggle('active', this.mutePiano);
+            console.log('Mute piano:', this.mutePiano);
+        });
+        
+        document.getElementById('muteDrums')?.addEventListener('click', (e) => {
+            this.muteDrums = !this.muteDrums;
+            e.target.classList.toggle('active', this.muteDrums);
+            console.log('Mute drums:', this.muteDrums);
+        });
+        
+        // Volume sliders (dB)
+        document.getElementById('pianoVolume')?.addEventListener('input', (e) => {
+            const db = parseFloat(e.target.value);
+            this.synth.volume.value = db;
+            document.getElementById('pianoDb').value = db.toFixed(1);
+        });
+        
+        document.getElementById('pianoDb')?.addEventListener('input', (e) => {
+            const db = parseFloat(e.target.value);
+            this.synth.volume.value = db;
+            document.getElementById('pianoVolume').value = db;
+        });
+        
+        document.getElementById('drumVolume')?.addEventListener('input', (e) => {
+            const db = parseFloat(e.target.value);
+            // Update all drum sounds volume
+            Object.values(this.drumSounds).forEach(sound => {
+                if (sound && sound.volume) {
+                    sound.volume.value = db;
+                }
+            });
+            document.getElementById('drumDb').value = db.toFixed(1);
+        });
+        
+        document.getElementById('drumDb')?.addEventListener('input', (e) => {
+            const db = parseFloat(e.target.value);
+            // Update all drum sounds volume
+            Object.values(this.drumSounds).forEach(sound => {
+                if (sound && sound.volume) {
+                    sound.volume.value = db;
+                }
+            });
+            document.getElementById('drumVolume').value = db;
+        });
+        
+        // Start meter animation
+        this.startMeterAnimation();
+        
+        // Export drum MIDI
+        document.getElementById('exportDrumMidi')?.addEventListener('click', () => {
+            this.exportDrumMidi();
         });
         
         // Filter controls
@@ -876,15 +1005,71 @@ class ChordProgressionApp {
 
     parseChords() {
         const input = document.getElementById('chordInput').value;
-        const bars = input.split('|').filter(b => b.trim());
+        const lines = input.split('\n').filter(line => line.trim());
         
-        this.progression = bars.map((bar, i) => {
-            const chords = bar.trim().split(/\s+/).filter(c => c);
-            return {
-                barNum: i + 1,
-                chords: chords.map(c => this.parseChord(c))
-            };
+        // Collect all bars first
+        const allBars = [];
+        let barNum = 1;
+        
+        lines.forEach(line => {
+            // Split by | and filter out empty strings
+            const bars = line.split('|').map(s => s.trim()).filter(s => s);
+            
+            bars.forEach(barContent => {
+                // Each bar can have multiple chords
+                const chordSymbols = barContent.split(/\s+/).filter(c => c);
+                const parsedChords = chordSymbols.map(c => this.parseChord(c)).filter(c => c);
+                
+                if (parsedChords.length > 0) {
+                    allBars.push({
+                        barNum: barNum++,
+                        chords: parsedChords
+                    });
+                }
+            });
         });
+        
+        // Split into patterns of 8 bars each
+        const patternNames = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D1', 'D2', 'D3', 'D4'];
+        let patternIndex = 0;
+        
+        // Clear all patterns first
+        this.patterns = {};
+        
+        // Remove all has-data classes
+        document.querySelectorAll('.pattern-btn').forEach(btn => {
+            btn.classList.remove('has-data');
+        });
+        
+        for (let i = 0; i < allBars.length; i += 8) {
+            const patternBars = allBars.slice(i, i + 8);
+            const patternName = patternNames[patternIndex];
+            
+            if (patternName && patternBars.length > 0) {
+                // Keep original bar numbers (1-8, 9-16, 17-24, etc.)
+                // Bar numbers are already set correctly in allBars
+                
+                this.patterns[patternName] = {
+                    progression: patternBars,
+                    drumPatterns: {},
+                    notes: {}
+                };
+                
+                // Mark pattern button as having data
+                const btn = document.querySelector(`.pattern-btn[data-pattern="${patternName}"]`);
+                if (btn) btn.classList.add('has-data');
+                
+                patternIndex++;
+            }
+        }
+        
+        // Load first pattern
+        this.currentPattern = 'A1';
+        if (this.patterns['A1']) {
+            this.progression = JSON.parse(JSON.stringify(this.patterns['A1'].progression));
+        } else {
+            this.progression = allBars.slice(0, 8);
+        }
         
         this.originalProgression = JSON.parse(JSON.stringify(this.progression));
         this.isModified = false;
@@ -896,9 +1081,13 @@ class ChordProgressionApp {
         document.getElementById('loopEnd').value = this.loopEnd;
         
         this.buildGrid();
-        this.buildDrumGrid(); // Rebuild drum grid to match new bar count
+        this.buildDrumGrid();
         this.analyzeProgression();
         if (this.updateLoopSlider) this.updateLoopSlider();
+        
+        console.log(`Parsed ${allBars.length} bars into ${patternIndex} patterns`);
+        console.log('Pattern A1 bars:', this.patterns['A1'] ? this.patterns['A1'].progression.map(b => b.barNum) : 'empty');
+        console.log('Pattern A2 bars:', this.patterns['A2'] ? this.patterns['A2'].progression.map(b => b.barNum) : 'empty');
     }
     
     parseChord(symbol) {
@@ -952,10 +1141,34 @@ class ChordProgressionApp {
         // Calculate bar width so 8 bars fill the screen
         const gridWrapper = document.querySelector('.grid-wrapper');
         const availableWidth = gridWrapper ? gridWrapper.clientWidth - 80 : 1120; // Subtract label width
-        this.barWidth = Math.floor(availableWidth / 8);
+        this.barWidth = Math.max(100, Math.floor(availableWidth / 8)); // Min 100px per bar
         
         // Update CSS variable
         document.documentElement.style.setProperty('--bar-width', `${this.barWidth}px`);
+        
+        // Enable scroll only in song mode with >8 bars
+        if (gridWrapper) {
+            // In pattern mode, always show max 8 bars, no scroll
+            const shouldScroll = this.songMode && numBars > 8;
+            gridWrapper.style.overflowX = shouldScroll ? 'auto' : 'hidden';
+            
+            // Link scroll with drum sequencer
+            if (!this.scrollListenerAdded) {
+                gridWrapper.addEventListener('scroll', () => {
+                    if (this.linkScroll && !this.isScrolling) {
+                        this.isScrolling = true;
+                        const drumWrapper = document.querySelector('.drum-grid-wrapper');
+                        if (drumWrapper) {
+                            drumWrapper.scrollLeft = gridWrapper.scrollLeft;
+                        }
+                        setTimeout(() => this.isScrolling = false, 50);
+                    }
+                });
+                this.scrollListenerAdded = true;
+            }
+        }
+        
+        console.log('Bar width calculated:', this.barWidth, 'Bars:', numBars);
         
         container.style.gridTemplateColumns = `80px repeat(${numBars}, ${this.barWidth}px)`;
         
@@ -2387,7 +2600,15 @@ class ChordProgressionApp {
         Tone.Transport.bpm.value = this.bpm;
         
         const barDuration = (60 / this.bpm) * 4;
-        const barWidth = this.barWidth || 140;
+        
+        // Ensure barWidth is set
+        if (!this.barWidth) {
+            const gridWrapper = document.querySelector('.grid-wrapper');
+            const availableWidth = gridWrapper ? gridWrapper.clientWidth - 80 : 1120;
+            this.barWidth = Math.max(100, Math.floor(availableWidth / 8));
+        }
+        
+        const barWidth = this.barWidth;
         const totalDuration = this.progression.length * barDuration;
         
         const gridContainer = document.getElementById('gridContainer');
@@ -2427,7 +2648,7 @@ class ChordProgressionApp {
                         // Highlight only notes from this sub-chord
                         this.highlightSubChordNotes(this.currentBar, chordIdx);
                         
-                        if (chord && chord.midiNotes) {
+                        if (chord && chord.midiNotes && !this.mutePiano) {
                             if (this.arpEnabled) {
                                 this.playArpeggio(chord.midiNotes, chordDuration);
                             } else {
@@ -2443,7 +2664,7 @@ class ChordProgressionApp {
                 
                 bar.chords.forEach((chord, chordIdx) => {
                     setTimeout(() => {
-                        if (chord && chord.midiNotes) {
+                        if (chord && chord.midiNotes && !this.mutePiano) {
                             if (this.arpEnabled) {
                                 this.playArpeggio(chord.midiNotes, chordDuration);
                             } else {
@@ -2463,6 +2684,56 @@ class ChordProgressionApp {
                 const loopEndBar = Math.min(this.loopEnd, this.progression.length);
                 
                 if (this.currentBar >= loopEndBar) {
+                    // Check if we should chain to next pattern
+                    if (this.chainPatterns && !this.songMode) {
+                        const nextPattern = this.getNextFilledPattern();
+                        if (nextPattern) {
+                            console.log('Chaining to pattern:', nextPattern);
+                            
+                            // Pre-load next pattern data without UI rebuild
+                            if (this.patterns[nextPattern]) {
+                                this.progression = JSON.parse(JSON.stringify(this.patterns[nextPattern].progression));
+                                this.drumPatterns = JSON.parse(JSON.stringify(this.patterns[nextPattern].drumPatterns));
+                                this.notes = this.patterns[nextPattern].notes ? JSON.parse(JSON.stringify(this.patterns[nextPattern].notes)) : {};
+                            }
+                            
+                            // Update UI in background
+                            this.currentPattern = nextPattern;
+                            const label = document.getElementById('currentPatternLabel');
+                            if (label) label.textContent = nextPattern;
+                            
+                            // Update pattern button states
+                            document.querySelectorAll('.pattern-btn').forEach(btn => {
+                                btn.classList.remove('active');
+                            });
+                            const activeBtn = document.querySelector(`.pattern-btn[data-pattern="${nextPattern}"]`);
+                            if (activeBtn) activeBtn.classList.add('active');
+                            
+                            // Auto-generate random beat for new pattern if enabled
+                            if (this.autoRandomBeats) {
+                                this.generateRandomBeatForPattern(nextPattern);
+                            }
+                            
+                            this.currentBar = 0;
+                            // Continue playback seamlessly
+                            this.playStartTime = performance.now();
+                            this.playStartBar = 0;
+                            
+                            // Rebuild grid async to avoid blocking
+                            requestAnimationFrame(() => {
+                                this.buildGrid();
+                                this.buildDrumGrid();
+                            });
+                            
+                            playBar();
+                            return;
+                        } else if (!this.loopChain) {
+                            // No next pattern and loop chain is OFF - stop
+                            this.stop();
+                            return;
+                        }
+                    }
+                    
                     if (this.loopEnabled) {
                         this.currentBar = Math.max(0, this.loopStart - 1); // Loop back to loop start
                         playBar();
@@ -2598,22 +2869,41 @@ class ChordProgressionApp {
             const actualBarWidth = this.barWidth || 140;
             
             if (this.followPlayhead) {
-                // FOLLOW MODE: Playhead stays center, grid scrolls
+                // FOLLOW MODE: Smart scrolling like DAWs
                 const gridWrapper = document.querySelector('.grid-wrapper');
                 if (gridWrapper) {
                     const wrapperRect = gridWrapper.getBoundingClientRect();
-                    const centerX = wrapperRect.left + (wrapperRect.width / 2);
-                    this.playheadElement.style.left = centerX + 'px';
-                    
-                    // Scroll grid to keep current position under playhead center
                     const currentPos = (actualBar * actualBarWidth) + (progressInCurrentBar * actualBarWidth);
-                    const scrollPos = currentPos - (wrapperRect.width / 2) + 80;
-                    gridWrapper.scrollLeft = Math.max(0, scrollPos);
+                    const totalWidth = this.progression.length * actualBarWidth;
+                    const viewportWidth = wrapperRect.width;
                     
-                    // Also scroll drum sequencer
+                    // Calculate playhead position based on scroll state
+                    let playheadX;
+                    let scrollPos = gridWrapper.scrollLeft;
+                    
+                    // Phase 1: Playhead moves to center (beginning)
+                    if (currentPos < viewportWidth / 2) {
+                        playheadX = wrapperRect.left + currentPos + 80;
+                        scrollPos = 0;
+                    }
+                    // Phase 2: Playhead stays center, grid scrolls (middle)
+                    else if (currentPos < totalWidth - viewportWidth / 2) {
+                        playheadX = wrapperRect.left + (viewportWidth / 2);
+                        scrollPos = currentPos - (viewportWidth / 2) + 80;
+                    }
+                    // Phase 3: Playhead moves to right (end)
+                    else {
+                        playheadX = wrapperRect.left + (currentPos - (totalWidth - viewportWidth)) + 80;
+                        scrollPos = totalWidth - viewportWidth + 80;
+                    }
+                    
+                    this.playheadElement.style.left = playheadX + 'px';
+                    gridWrapper.scrollLeft = scrollPos;
+                    
+                    // Sync drum sequencer
                     const drumWrapper = document.querySelector('.drum-grid-wrapper');
                     if (drumWrapper) {
-                        drumWrapper.scrollLeft = Math.max(0, scrollPos);
+                        drumWrapper.scrollLeft = scrollPos;
                     }
                 }
             } else {
@@ -2949,9 +3239,11 @@ class ChordProgressionApp {
         });
         this.drumPatterns = newPatterns;
         
-        this.progression.forEach((bar, i) => {
-            bar.barNum = i + 1;
-        });
+        // Don't renumber bars - keep original bar numbers from pattern
+        // this.progression.forEach((bar, i) => {
+        //     bar.barNum = i + 1;
+        // });
+        
         this.buildGrid();
         this.buildDrumGrid(); // Rebuild drum grid
         this.analyzeProgression();
@@ -4709,6 +5001,29 @@ class ChordProgressionApp {
         });
         
         this.updateDrumGrid();
+        
+        // Control drum wrapper scroll based on mode
+        const drumWrapper = document.querySelector('.drum-grid-wrapper');
+        if (drumWrapper) {
+            // In pattern mode, no scroll. In song mode, scroll if >8 bars
+            const shouldScroll = this.songMode && this.progression.length > 8;
+            drumWrapper.style.overflowX = shouldScroll ? 'auto' : 'hidden';
+        }
+        
+        // Link drum scroll with piano roll
+        if (drumWrapper && !this.drumScrollListenerAdded) {
+            drumWrapper.addEventListener('scroll', () => {
+                if (this.linkScroll && !this.isScrolling) {
+                    this.isScrolling = true;
+                    const gridWrapper = document.querySelector('.grid-wrapper');
+                    if (gridWrapper) {
+                        gridWrapper.scrollLeft = drumWrapper.scrollLeft;
+                    }
+                    setTimeout(() => this.isScrolling = false, 50);
+                }
+            });
+            this.drumScrollListenerAdded = true;
+        }
     }
     
     toggleDrumStep(drum, barIndex, step) {
@@ -4795,8 +5110,8 @@ class ChordProgressionApp {
                     const delay = stepIndex * stepDuration * 1000; // Convert to ms
                     
                     setTimeout(() => {
-                        // Play drum sound
-                        if (this.drumSounds[drumKey]) {
+                        // Play drum sound (only if not muted)
+                        if (this.drumSounds[drumKey] && !this.muteDrums) {
                             if (drumKey === 'kick') {
                                 this.drumSounds.kick.triggerAttackRelease('C1', '16n');
                             } else {
@@ -4829,11 +5144,14 @@ class ChordProgressionApp {
         if (stepEl) {
             stepEl.classList.add('playing');
             
-            // Remove highlight after short duration with cleanup
+            // Remove highlight after step duration (match timing)
+            const barDuration = (60 / this.bpm) * 4;
+            const stepDuration = (barDuration / 16) * 1000; // Convert to ms
+            
             stepEl.highlightTimeout = setTimeout(() => {
                 stepEl.classList.remove('playing');
                 delete stepEl.highlightTimeout;
-            }, 150);
+            }, Math.min(stepDuration * 0.8, 200)); // 80% of step or max 200ms
         }
     }
     
@@ -4924,6 +5242,323 @@ class ChordProgressionApp {
             left: Math.max(0, scrollPos),
             behavior: 'smooth'
         });
+    }
+    
+    toggleSection(sectionId) {
+        const section = document.getElementById(sectionId);
+        const toggle = document.getElementById(sectionId.replace('Content', 'Toggle'));
+        
+        if (section) {
+            const isHidden = section.style.display === 'none';
+            section.style.display = isHidden ? 'block' : 'none';
+            if (toggle) {
+                toggle.textContent = isHidden ? '▼' : '▶';
+            }
+        }
+    }
+    
+    getNextFilledPattern() {
+        const patternOrder = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D1', 'D2', 'D3', 'D4'];
+        const currentIndex = patternOrder.indexOf(this.currentPattern);
+        
+        // Find next filled pattern
+        for (let i = currentIndex + 1; i < patternOrder.length; i++) {
+            if (this.patterns[patternOrder[i]]) {
+                return patternOrder[i];
+            }
+        }
+        
+        // Loop back to first filled pattern
+        for (let i = 0; i <= currentIndex; i++) {
+            if (this.patterns[patternOrder[i]]) {
+                return patternOrder[i];
+            }
+        }
+        
+        return null;
+    }
+    
+    generateRandomBeatForPattern(patternId) {
+        this.generateRandomBeatForPatternSilent(patternId);
+        this.updateDrumGrid();
+        console.log('Generated random beat for pattern:', patternId);
+    }
+    
+    generateRandomBeatForPatternSilent(patternId) {
+        if (!this.patterns[patternId]) return;
+        
+        const numBars = this.patterns[patternId].progression.length;
+        const tempDrumPatterns = {};
+        
+        // Use true random for different results each time
+        const random = () => Math.random();
+        
+        // Generate different beat patterns
+        for (let barIdx = 0; barIdx < numBars; barIdx++) {
+            tempDrumPatterns[barIdx] = {
+                kick: new Array(16).fill(0),
+                snare: new Array(16).fill(0),
+                hihat: new Array(16).fill(0),
+                clap: new Array(16).fill(0)
+            };
+            
+            // Kick: on beats 1 and 3 (always), sometimes on other beats
+            tempDrumPatterns[barIdx].kick[0] = 1;
+            tempDrumPatterns[barIdx].kick[8] = 1;
+            if (random() > 0.7) tempDrumPatterns[barIdx].kick[4] = 1;
+            if (random() > 0.8) tempDrumPatterns[barIdx].kick[12] = 1;
+            if (random() > 0.85) tempDrumPatterns[barIdx].kick[6] = 1;
+            if (random() > 0.9) tempDrumPatterns[barIdx].kick[14] = 1;
+            
+            // Snare: on beats 2 and 4 (always), sometimes variations
+            tempDrumPatterns[barIdx].snare[4] = 1;
+            tempDrumPatterns[barIdx].snare[12] = 1;
+            if (random() > 0.8) tempDrumPatterns[barIdx].snare[2] = 1;
+            if (random() > 0.85) tempDrumPatterns[barIdx].snare[10] = 1;
+            
+            // Hi-hat: varied patterns
+            const hihatDensity = random();
+            for (let i = 0; i < 16; i++) {
+                if (hihatDensity > 0.7) {
+                    // Dense pattern (16th notes with gaps)
+                    if (random() > 0.2) tempDrumPatterns[barIdx].hihat[i] = 1;
+                } else if (hihatDensity > 0.4) {
+                    // Medium pattern (8th notes)
+                    if (i % 2 === 0 && random() > 0.3) tempDrumPatterns[barIdx].hihat[i] = 1;
+                } else {
+                    // Sparse pattern (quarter notes)
+                    if (i % 4 === 0 && random() > 0.4) tempDrumPatterns[barIdx].hihat[i] = 1;
+                }
+            }
+            
+            // Clap: occasional accents
+            if (random() > 0.7) tempDrumPatterns[barIdx].clap[6] = 1;
+            if (random() > 0.75) tempDrumPatterns[barIdx].clap[14] = 1;
+            if (random() > 0.85) tempDrumPatterns[barIdx].clap[2] = 1;
+            if (random() > 0.9) tempDrumPatterns[barIdx].clap[10] = 1;
+        }
+        
+        // Save to pattern
+        this.patterns[patternId].drumPatterns = tempDrumPatterns;
+    }
+    
+    exportDrumMidi() {
+        // General MIDI drum map
+        const drumMap = {
+            kick: 36,   // C1 - Bass Drum
+            snare: 38,  // D1 - Snare
+            hihat: 42,  // F#1 - Closed Hi-Hat
+            clap: 39    // D#1 - Hand Clap
+        };
+        
+        // Create MIDI file structure
+        const ppq = 480; // Pulses per quarter note
+        const ticksPerStep = ppq / 4; // 16th note = 1/4 of quarter note
+        
+        // MIDI header
+        const header = [
+            0x4D, 0x54, 0x68, 0x64, // "MThd"
+            0x00, 0x00, 0x00, 0x06, // Header length
+            0x00, 0x00,             // Format 0
+            0x00, 0x01,             // 1 track
+            (ppq >> 8) & 0xFF, ppq & 0xFF // Ticks per quarter note
+        ];
+        
+        // Track events
+        const events = [];
+        
+        // Tempo: 120 BPM = 500000 microseconds per quarter note
+        const tempo = Math.floor(60000000 / this.bpm);
+        events.push([0, 0xFF, 0x51, 0x03, (tempo >> 16) & 0xFF, (tempo >> 8) & 0xFF, tempo & 0xFF]);
+        
+        // Add drum notes
+        const numBars = this.progression.length;
+        for (let barIdx = 0; barIdx < numBars; barIdx++) {
+            const pattern = this.drumPatterns[barIdx];
+            if (!pattern) continue;
+            
+            Object.keys(drumMap).forEach(drumKey => {
+                const midiNote = drumMap[drumKey];
+                const steps = pattern[drumKey];
+                if (!steps) return;
+                
+                steps.forEach((active, stepIdx) => {
+                    if (active) {
+                        const tick = (barIdx * 16 + stepIdx) * ticksPerStep;
+                        const duration = ticksPerStep;
+                        
+                        // Note on
+                        events.push([tick, 0x99, midiNote, 100]); // Channel 10, velocity 100
+                        // Note off
+                        events.push([tick + duration, 0x89, midiNote, 0]);
+                    }
+                });
+            });
+        }
+        
+        // Sort events by time
+        events.sort((a, b) => a[0] - b[0]);
+        
+        // Convert to delta times and encode
+        const trackData = [];
+        let lastTick = 0;
+        
+        events.forEach(event => {
+            const tick = event[0];
+            const delta = tick - lastTick;
+            lastTick = tick;
+            
+            // Variable length quantity encoding
+            const deltaBytes = this.encodeVLQ(delta);
+            trackData.push(...deltaBytes);
+            trackData.push(...event.slice(1));
+        });
+        
+        // End of track
+        trackData.push(0x00, 0xFF, 0x2F, 0x00);
+        
+        // Track header
+        const trackHeader = [
+            0x4D, 0x54, 0x72, 0x6B, // "MTrk"
+            (trackData.length >> 24) & 0xFF,
+            (trackData.length >> 16) & 0xFF,
+            (trackData.length >> 8) & 0xFF,
+            trackData.length & 0xFF
+        ];
+        
+        // Combine all
+        const midiData = new Uint8Array([...header, ...trackHeader, ...trackData]);
+        
+        // Download
+        const blob = new Blob([midiData], { type: 'audio/midi' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `drums_pattern_${this.currentPattern}.mid`;
+        a.click();
+        URL.revokeObjectURL(url);
+        
+        console.log('Exported drum MIDI:', `drums_pattern_${this.currentPattern}.mid`);
+    }
+    
+    encodeVLQ(value) {
+        // Variable Length Quantity encoding for MIDI
+        const bytes = [];
+        bytes.push(value & 0x7F);
+        value >>= 7;
+        
+        while (value > 0) {
+            bytes.unshift((value & 0x7F) | 0x80);
+            value >>= 7;
+        }
+        
+        return bytes;
+    }
+    
+    startMeterAnimation() {
+        const pianoMeter = document.getElementById('pianoMeter');
+        const drumMeter = document.getElementById('drumMeter');
+        
+        let pianoLevel = 0;
+        let drumLevel = 0;
+        
+        setInterval(() => {
+            // Simulate meter activity during playback
+            if (this.isPlaying) {
+                // Piano meter - random activity
+                pianoLevel = Math.random() * 60 + 20; // 20-80%
+                // Drum meter - random activity
+                drumLevel = Math.random() * 70 + 10; // 10-80%
+            } else {
+                // Decay when not playing
+                pianoLevel *= 0.8;
+                drumLevel *= 0.8;
+            }
+            
+            if (pianoMeter) pianoMeter.style.height = `${pianoLevel}%`;
+            if (drumMeter) drumMeter.style.height = `${drumLevel}%`;
+        }, 50);
+    }
+    
+    buildPatternMatrix() {
+        const container = document.getElementById('patternMatrix');
+        if (!container) return;
+        
+        const rows = ['A', 'B', 'C', 'D'];
+        const cols = [1, 2, 3, 4];
+        
+        rows.forEach(row => {
+            cols.forEach(col => {
+                const patternId = `${row}${col}`;
+                const btn = document.createElement('button');
+                btn.className = 'pattern-btn';
+                btn.textContent = patternId;
+                btn.dataset.pattern = patternId;
+                
+                if (patternId === 'A1') {
+                    btn.classList.add('active');
+                }
+                
+                btn.addEventListener('click', () => this.switchPattern(patternId));
+                container.appendChild(btn);
+            });
+        });
+    }
+    
+    switchPattern(patternId) {
+        console.log('Switching to pattern:', patternId);
+        
+        // Save current pattern
+        this.saveCurrentPattern();
+        
+        // Load new pattern
+        this.currentPattern = patternId;
+        this.loadPattern(patternId);
+        
+        // Update UI
+        document.querySelectorAll('.pattern-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.pattern === patternId);
+        });
+        
+        const label = document.getElementById('currentPatternLabel');
+        if (label) label.textContent = patternId;
+    }
+    
+    saveCurrentPattern() {
+        this.patterns[this.currentPattern] = {
+            progression: JSON.parse(JSON.stringify(this.progression)),
+            drumPatterns: JSON.parse(JSON.stringify(this.drumPatterns)),
+            notes: this.notes ? JSON.parse(JSON.stringify(this.notes)) : {}
+        };
+        
+        // Mark pattern as having data
+        const btn = document.querySelector(`.pattern-btn[data-pattern="${this.currentPattern}"]`);
+        if (btn) btn.classList.add('has-data');
+    }
+    
+    loadPattern(patternId) {
+        if (this.patterns[patternId]) {
+            // Load existing pattern with original bar numbers
+            this.progression = JSON.parse(JSON.stringify(this.patterns[patternId].progression));
+            this.drumPatterns = JSON.parse(JSON.stringify(this.patterns[patternId].drumPatterns));
+            this.notes = this.patterns[patternId].notes ? JSON.parse(JSON.stringify(this.patterns[patternId].notes)) : {};
+            
+            console.log('Loaded pattern:', patternId, 'Bars:', this.progression.map(b => b.barNum).join(','));
+        } else {
+            // Empty pattern - no bars
+            this.progression = [];
+            this.drumPatterns = {};
+            this.notes = {};
+            
+            console.log('Loaded empty pattern:', patternId);
+        }
+        
+        this.buildGrid();
+        this.buildDrumGrid();
+        this.analyzeProgression();
+        
+        // Debug: show current bar numbers
+        console.log('Current progression bar numbers:', this.progression.map(b => b.barNum));
     }
 }
 
