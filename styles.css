@@ -255,6 +255,7 @@ input[type="range"] {
     position: relative;
     width: fit-content;
     border-top: 1px solid #333;
+    margin-left: var(--label-width);
 }
 
 .loop-slider-range {
@@ -393,6 +394,13 @@ input[type="range"] {
     color: #4CAF50;
 }
 
+/* UNIVERSAL GRID SYSTEM */
+:root {
+    --label-width: 80px;
+    --bar-width: 140px;    /* Calculated so 8 bars fit on screen */
+    --bar-gap: 0px;
+}
+
 /* Grid Container Wrapper - for horizontal scroll */
 .grid-wrapper {
     position: relative;
@@ -447,9 +455,9 @@ input[type="range"] {
 /* Vertical Ruler */
 .vertical-ruler {
     display: flex;
-    gap: 0;
+    gap: var(--bar-gap);
     margin-bottom: 0;
-    padding-left: 80px;
+    padding-left: var(--label-width);
     background: #1a1a1a;
     position: sticky;
     top: 0;
@@ -457,7 +465,7 @@ input[type="range"] {
 }
 
 .ruler-bar {
-    width: 120px;
+    width: var(--bar-width);
     height: 30px;
     background: #2a2a2a;
     border: 1px solid #444;
@@ -531,8 +539,8 @@ input[type="range"] {
 /* Chord Cell */
 .chord-cell {
     min-height: 100px;
-    width: 120px;
-    max-width: 120px;
+    width: var(--bar-width);
+    max-width: var(--bar-width);
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -1066,14 +1074,17 @@ input[type="range"] {
     color: #aaa;
 }
 
-/* Playhead */
+/* UNIVERSAL PLAYHEAD - spans entire viewport height */
 .playhead {
     position: fixed;
     width: 3px;
+    height: 100vh;
+    top: 0;
     background: #ff6b6b;
     box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
     z-index: 1000;
     pointer-events: none;
+    display: none;
 }
 
 /* Playhead Hit Marker - MEGA EXPLOSION */
@@ -1561,17 +1572,6 @@ input[type="range"] {
     position: relative;
 }
 
-.drum-playhead {
-    position: absolute;
-    top: 0;
-    left: 80px; /* Start after drum labels */
-    width: 2px;
-    height: 100%;
-    background: #ff6b00;
-    z-index: 10;
-    pointer-events: none;
-    box-shadow: 0 0 10px rgba(255, 107, 0, 0.5);
-}
 
 .drum-grid-horizontal {
     display: flex;
@@ -1583,11 +1583,13 @@ input[type="range"] {
 .drum-track {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: var(--bar-gap);
 }
 
 .drum-label {
-    min-width: 80px;
+    width: var(--label-width);
+    min-width: var(--label-width);
+    max-width: var(--label-width);
     color: #ccc;
     font-size: 0.85rem;
     font-weight: 600;
@@ -1596,17 +1598,19 @@ input[type="range"] {
     position: sticky;
     left: 0;
     z-index: 2;
+    box-sizing: border-box;
 }
 
 .drum-bar-numbers {
     display: flex;
-    margin-left: 80px;
+    gap: var(--bar-gap);
+    margin-left: var(--label-width);
     margin-bottom: 0.25rem;
 }
 
 .drum-bar-number {
     flex: 0 0 auto;
-    width: var(--drum-bar-width, 240px); /* Default 2x zoom */
+    width: var(--bar-width);
     text-align: center;
     color: #00d4ff;
     font-size: 0.75rem;
@@ -1617,7 +1621,7 @@ input[type="range"] {
     display: flex;
     gap: 2px;
     flex: 0 0 auto;
-    width: var(--drum-bar-width, 240px); /* Default 2x zoom */
+    width: var(--bar-width);
 }
 
 .drum-step {

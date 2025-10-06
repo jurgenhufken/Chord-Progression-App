@@ -26,15 +26,13 @@ class ChordProgressionApp {
         // Drum sequencer
         this.drumPatterns = {}; // { barIndex: { kick: { steps: [0,0,1,...], velocity: [...], duration: [...], gate: [...], ratchet: [...] } } }
         this.drumSounds = null;
-        this.drumEffects = null;
         this.drumRouting = {}; // { drumKey: { delay: 0.5, reverb: 0.3, distortion: 0 } }
         this.currentDrumStep = 0;
         this.drumClipboard = null;
         this.selectedDrumTrack = null; // For showing parameters
         this.drumZoom = 2; // Default 2x zoom
-        this.drumFollowPlayhead = true;
-        
-        // Arpeggiator
+        this.drumFollowPlayhead = true; // Default to following playhead
+        this.followPlayhead = true; // Follow mode for chord grid
         this.arpEnabled = false;
         this.arpPattern = 'up';
         this.arpSpeed = '1/8';
@@ -122,13 +120,14 @@ class ChordProgressionApp {
             const totalBars = this.progression.length;
             if (totalBars === 0) return;
             
-            // Calculate based on actual grid width (80px label + 120px per bar)
-            const gridWidth = 80 + (totalBars * 120);
+            // Use dynamic bar width
+            const barWidth = this.barWidth || 140;
+            const labelWidth = 0; // Track already has margin-left in CSS
+            const gridWidth = (totalBars * barWidth);
             track.style.width = gridWidth + 'px';
             
-            const barWidth = 120;
-            const startPos = 80 + ((this.loopStart - 1) * barWidth);
-            const endPos = 80 + (this.loopEnd * barWidth);
+            const startPos = ((this.loopStart - 1) * barWidth);
+            const endPos = (this.loopEnd * barWidth);
             
             range.style.left = startPos + 'px';
             range.style.width = (endPos - startPos) + 'px';
@@ -179,7 +178,7 @@ class ChordProgressionApp {
             if (!dragging) return;
             e.preventDefault();
             
-            const barWidth = 120;
+            const barWidth = this.barWidth || 140;
             const labelWidth = 80;
             const gridContainer = document.getElementById('gridContainer');
             if (!gridContainer) return;
@@ -374,7 +373,11 @@ class ChordProgressionApp {
             this.updateDrumZoom();
         });
         
-        // Drum follow playhead
+        // Follow playhead toggles
+        document.getElementById('followPlayhead')?.addEventListener('change', (e) => {
+            this.followPlayhead = e.target.checked;
+        });
+        
         document.getElementById('drumFollowPlayhead')?.addEventListener('change', (e) => {
             this.drumFollowPlayhead = e.target.checked;
         });
@@ -946,8 +949,14 @@ class ChordProgressionApp {
         
         const numBars = Math.max(this.progression.length, 1);
         
-        // FIXED bar width - never changes
-        this.barWidth = 120;
+        // Calculate bar width so 8 bars fill the screen
+        const gridWrapper = document.querySelector('.grid-wrapper');
+        const availableWidth = gridWrapper ? gridWrapper.clientWidth - 80 : 1120; // Subtract label width
+        this.barWidth = Math.floor(availableWidth / 8);
+        
+        // Update CSS variable
+        document.documentElement.style.setProperty('--bar-width', `${this.barWidth}px`);
+        
         container.style.gridTemplateColumns = `80px repeat(${numBars}, ${this.barWidth}px)`;
         
         // Calculate actual note range
@@ -988,21 +997,14 @@ class ChordProgressionApp {
             container.style.gridTemplateRows = `80px`;
         }
         
-        // Playhead
-        this.playheadElement = document.createElement('div');
-        this.playheadElement.className = 'playhead';
-        this.playheadElement.style.left = '80px';
-        this.playheadElement.style.display = 'none';
-        
-        // Set playhead position based on grid wrapper
-        const gridWrapper = document.querySelector('.grid-wrapper');
-        if (gridWrapper) {
-            const rect = gridWrapper.getBoundingClientRect();
-            this.playheadElement.style.top = rect.top + 'px';
-            this.playheadElement.style.height = rect.height + 'px';
+        // Universal Playhead - create once, spans entire viewport
+        if (!this.playheadElement) {
+            this.playheadElement = document.createElement('div');
+            this.playheadElement.className = 'playhead';
+            this.playheadElement.style.left = '80px';
+            // Append to body for full viewport coverage
+            document.body.appendChild(this.playheadElement);
         }
-        
-        container.appendChild(this.playheadElement);
         
         // Build vertical ruler
         this.buildVerticalRuler();
@@ -1514,7 +1516,7 @@ class ChordProgressionApp {
         this.draggedNote.style.transform = '';
         
         // Calculate which bar and note the drag ended on
-        const barWidth = 120;
+        const barWidth = this.barWidth || 140;
         const noteHeight = 20;
         const newBarOffset = Math.round(deltaX / barWidth);
         const newNoteOffset = Math.round(deltaY / noteHeight);
@@ -2385,7 +2387,7 @@ class ChordProgressionApp {
         Tone.Transport.bpm.value = this.bpm;
         
         const barDuration = (60 / this.bpm) * 4;
-        const barWidth = 120;
+        const barWidth = this.barWidth || 140;
         const totalDuration = this.progression.length * barDuration;
         
         const gridContainer = document.getElementById('gridContainer');
@@ -2593,10 +2595,33 @@ class ChordProgressionApp {
             }
             
             // Calculate playhead position
-            const barPosition = currentStartPos + (actualBar * barWidth);
-            const position = barPosition + (progressInCurrentBar * barWidth);
+            const actualBarWidth = this.barWidth || 140;
             
-            this.playheadElement.style.left = position + 'px';
+            if (this.followPlayhead) {
+                // FOLLOW MODE: Playhead stays center, grid scrolls
+                const gridWrapper = document.querySelector('.grid-wrapper');
+                if (gridWrapper) {
+                    const wrapperRect = gridWrapper.getBoundingClientRect();
+                    const centerX = wrapperRect.left + (wrapperRect.width / 2);
+                    this.playheadElement.style.left = centerX + 'px';
+                    
+                    // Scroll grid to keep current position under playhead center
+                    const currentPos = (actualBar * actualBarWidth) + (progressInCurrentBar * actualBarWidth);
+                    const scrollPos = currentPos - (wrapperRect.width / 2) + 80;
+                    gridWrapper.scrollLeft = Math.max(0, scrollPos);
+                    
+                    // Also scroll drum sequencer
+                    const drumWrapper = document.querySelector('.drum-grid-wrapper');
+                    if (drumWrapper) {
+                        drumWrapper.scrollLeft = Math.max(0, scrollPos);
+                    }
+                }
+            } else {
+                // STATIC MODE: Playhead moves, grid stays
+                const barPosition = currentStartPos + (actualBar * actualBarWidth);
+                const position = barPosition + (progressInCurrentBar * actualBarWidth);
+                this.playheadElement.style.left = position + 'px';
+            }
             
             // Continue animation if playing
             if (this.isPlaying) {
@@ -2696,11 +2721,7 @@ class ChordProgressionApp {
         this.currentBar = 0;
         this.synth.releaseAll();
         
-        // Reset drum playhead
-        const drumPlayhead = document.getElementById('drumPlayhead');
-        if (drumPlayhead) {
-            drumPlayhead.style.left = '80px';
-        }
+        // Drum playhead is now universal playhead
         this.clearHighlights();
         
         if (this.playheadAnimationId) {
@@ -2787,7 +2808,19 @@ class ChordProgressionApp {
     }
 
     clearHighlights() {
+        // Clear all highlights: chord cells, piano cells, drum steps, arp hits
         document.querySelectorAll('.playing').forEach(el => el.classList.remove('playing'));
+        document.querySelectorAll('.note-flash').forEach(el => el.classList.remove('note-flash'));
+        document.querySelectorAll('.arp-hit').forEach(el => el.classList.remove('arp-hit'));
+        
+        // Clear drum step highlights with timeout cleanup
+        document.querySelectorAll('.drum-step.playing').forEach(el => {
+            el.classList.remove('playing');
+            if (el.highlightTimeout) {
+                clearTimeout(el.highlightTimeout);
+                delete el.highlightTimeout;
+            }
+        });
     }
 
     previewBar(barIdx) {
@@ -4749,10 +4782,9 @@ class ChordProgressionApp {
         if (!pattern) return;
         
         const stepDuration = barDuration / 16; // 16 steps per bar
-        const barWidth = 120 * this.drumZoom;
+        const barWidth = this.barWidth || 140;
         
-        // Animate drum playhead
-        this.animateDrumPlayhead(barIndex, barDuration);
+        // Drum playhead is now handled by universal playhead
         
         // Play each drum track
         Object.keys(pattern).forEach(drumKey => {
@@ -4780,33 +4812,16 @@ class ChordProgressionApp {
         });
     }
     
-    animateDrumPlayhead(barIndex, barDuration) {
-        const playhead = document.getElementById('drumPlayhead');
-        if (!playhead) return;
-        
-        const barWidth = 120 * this.drumZoom;
-        const startPos = 80 + (barIndex * barWidth); // 80px = label width
-        
-        // Reset transition and set start position immediately
-        playhead.style.transition = 'none';
-        playhead.style.left = startPos + 'px';
-        
-        // Force reflow to ensure transition reset
-        playhead.offsetHeight;
-        
-        // Use CSS transition for smooth animation
-        playhead.style.transition = `left ${barDuration}s linear`;
-        
-        // Trigger animation on next frame
-        requestAnimationFrame(() => {
-            playhead.style.left = (startPos + barWidth) + 'px';
-        });
-    }
+    // Removed - using universal playhead now
     
     highlightDrumStep(drum, barIndex, step) {
-        // Remove previous highlights for this drum
+        // Clear previous highlight for this drum with timeout cleanup
         document.querySelectorAll(`.drum-step[data-drum="${drum}"].playing`).forEach(el => {
             el.classList.remove('playing');
+            if (el.highlightTimeout) {
+                clearTimeout(el.highlightTimeout);
+                delete el.highlightTimeout;
+            }
         });
         
         // Highlight current step in current bar
@@ -4814,10 +4829,11 @@ class ChordProgressionApp {
         if (stepEl) {
             stepEl.classList.add('playing');
             
-            // Remove after a short time
-            setTimeout(() => {
+            // Remove highlight after short duration with cleanup
+            stepEl.highlightTimeout = setTimeout(() => {
                 stepEl.classList.remove('playing');
-            }, 100);
+                delete stepEl.highlightTimeout;
+            }, 150);
         }
     }
     
@@ -4885,17 +4901,14 @@ class ChordProgressionApp {
             this.drumPatterns[i] = JSON.parse(JSON.stringify(pattern));
         }
         
+        // Update visual grid
         this.updateDrumGrid();
-        console.log(`Auto-filled bar 1 pattern to all ${this.progression.length} bars`);
+        console.log('Auto-filled all bars with bar 1 pattern');
     }
     
     updateDrumZoom() {
-        const barWidth = 120 * this.drumZoom; // Base 120px * zoom factor
-        const drumGrid = document.getElementById('drumGrid');
-        if (drumGrid) {
-            drumGrid.style.setProperty('--drum-bar-width', `${barWidth}px`);
-        }
-        console.log(`Drum zoom set to ${this.drumZoom}x (${barWidth}px per bar)`);
+        // Drum zoom is now controlled by CSS variable --bar-width
+        // No need to update here - it's already 240px (2x)
     }
     
     scrollDrumToPlayhead() {
@@ -4904,7 +4917,7 @@ class ChordProgressionApp {
         const wrapper = document.querySelector('.drum-grid-wrapper');
         if (!wrapper) return;
         
-        const barWidth = 120 * this.drumZoom;
+        const barWidth = this.barWidth || 140;
         const scrollPos = this.currentBar * barWidth - (wrapper.clientWidth / 2) + (barWidth / 2);
         
         wrapper.scrollTo({
