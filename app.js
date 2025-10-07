@@ -399,16 +399,23 @@ class ChordProgressionApp {
         });
         
         document.getElementById('parseWithBeats')?.addEventListener('click', () => {
-            this.parseChords();
+            // Only parse if textarea has content
+            const textarea = document.getElementById('chordInput');
+            if (textarea && textarea.value.trim()) {
+                this.parseChords();
+            }
+            
             // Generate beats for all patterns
             Object.keys(this.patterns).forEach(patternId => {
                 this.generateRandomBeatForPatternSilent(patternId);
             });
+            
             // Load beats for current pattern
             if (this.patterns[this.currentPattern]) {
                 this.drumPatterns = JSON.parse(JSON.stringify(this.patterns[this.currentPattern].drumPatterns));
                 this.buildDrumGrid();
             }
+            
             console.log('Generated beats for all patterns');
         });
         
