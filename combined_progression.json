@@ -1,0 +1,328 @@
+{
+  "version": "3.0",
+  "progression": [
+    {
+      "barNum": 1,
+      "chords": [
+        {
+          "symbol": "Cm",
+          "root": "C",
+          "quality": "m",
+          "midiNotes": [
+            60,
+            63,
+            67
+          ],
+          "noteNames": [
+            "C4",
+            "D#4",
+            "G4"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 2,
+      "chords": [
+        {
+          "symbol": "G",
+          "root": "G",
+          "quality": "",
+          "midiNotes": [
+            67,
+            71,
+            74
+          ],
+          "noteNames": [
+            "G4",
+            "B4",
+            "D5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 3,
+      "chords": [
+        {
+          "symbol": "G#",
+          "root": "G#",
+          "quality": "",
+          "midiNotes": [
+            68,
+            72,
+            75
+          ],
+          "noteNames": [
+            "G#4",
+            "C5",
+            "D#5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 4,
+      "chords": [
+        {
+          "symbol": "D#",
+          "root": "D#",
+          "quality": "",
+          "midiNotes": [
+            63,
+            67,
+            70
+          ],
+          "noteNames": [
+            "D#4",
+            "G4",
+            "A#4"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 5,
+      "chords": [
+        {
+          "symbol": "Fm",
+          "root": "F",
+          "quality": "m",
+          "midiNotes": [
+            65,
+            68,
+            72
+          ],
+          "noteNames": [
+            "F4",
+            "G#4",
+            "C5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 6,
+      "chords": [
+        {
+          "symbol": "C#",
+          "root": "C#",
+          "quality": "",
+          "midiNotes": [
+            61,
+            65,
+            68
+          ],
+          "noteNames": [
+            "C#4",
+            "F4",
+            "G#4"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 7,
+      "chords": [
+        {
+          "symbol": "G",
+          "root": "G",
+          "quality": "",
+          "midiNotes": [
+            67,
+            71,
+            74
+          ],
+          "noteNames": [
+            "G4",
+            "B4",
+            "D5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 8,
+      "chords": [
+        {
+          "symbol": "Cm",
+          "root": "C",
+          "quality": "m",
+          "midiNotes": [
+            60,
+            63,
+            67
+          ],
+          "noteNames": [
+            "C4",
+            "D#4",
+            "G4"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 9,
+      "chords": [
+        {
+          "symbol": "C",
+          "root": "C",
+          "quality": "",
+          "midiNotes": [
+            60,
+            64,
+            67
+          ],
+          "noteNames": [
+            "C4",
+            "E4",
+            "G4"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 10,
+      "chords": [
+        {
+          "symbol": "Fm",
+          "root": "F",
+          "quality": "m",
+          "midiNotes": [
+            65,
+            68,
+            72
+          ],
+          "noteNames": [
+            "F4",
+            "G#4",
+            "C5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 11,
+      "chords": [
+        {
+          "symbol": "G#",
+          "root": "G#",
+          "quality": "",
+          "midiNotes": [
+            68,
+            72,
+            75
+          ],
+          "noteNames": [
+            "G#4",
+            "C5",
+            "D#5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 12,
+      "chords": [
+        {
+          "symbol": "G",
+          "root": "G",
+          "quality": "",
+          "midiNotes": [
+            67,
+            71,
+            74
+          ],
+          "noteNames": [
+            "G4",
+            "B4",
+            "D5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 13,
+      "chords": [
+        {
+          "symbol": "E",
+          "root": "E",
+          "quality": "",
+          "midiNotes": [
+            64,
+            67,
+            72
+          ],
+          "noteNames": [
+            "E4",
+            "G4",
+            "C5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 14,
+      "chords": [
+        {
+          "symbol": "Fm",
+          "root": "F",
+          "quality": "m",
+          "midiNotes": [
+            65,
+            68,
+            72
+          ],
+          "noteNames": [
+            "F4",
+            "G#4",
+            "C5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 15,
+      "chords": [
+        {
+          "symbol": "G",
+          "root": "G",
+          "quality": "",
+          "midiNotes": [
+            67,
+            71,
+            74
+          ],
+          "noteNames": [
+            "G4",
+            "B4",
+            "D5"
+          ]
+        }
+      ]
+    },
+    {
+      "barNum": 16,
+      "chords": [
+        {
+          "symbol": "D#",
+          "root": "D#",
+          "quality": "",
+          "midiNotes": [
+            63,
+            67,
+            72
+          ],
+          "noteNames": [
+            "D#4",
+            "G4",
+            "C5"
+          ]
+        }
+      ]
+    }
+  ],
+  "bpm": 120,
+  "loopStart": 1,
+  "loopEnd": 16
+}
