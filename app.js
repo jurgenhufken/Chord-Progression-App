@@ -108,16 +108,86 @@ class ChordProgressionApp {
         this.setupSynth();
         this.setupEventListeners();
         this.buildPatternMatrix();
-        this.parseChords();
-        this.buildDrumGrid();
-        this.updateDrumZoom(); // Set initial zoom
         
         // Set loop button active by default
         const loopBtn = document.getElementById('loopBtn');
         if (loopBtn) loopBtn.classList.add('active');
         
-        // Initialize loop slider
-        this.initLoopSlider();
+        // Load default progression from MIDI files (async)
+        // initLoopSlider will be called after progression is loaded
+        this.loadDefaultProgression();
+    }
+    
+    loadDefaultProgression() {
+        // Load exact MIDI notes from combined_progression.json
+        // These are the EXACT notes from the MIDI files - no interpretation!
+        fetch('combined_progression.json')
+            .then(response => response.json())
+            .then(data => {
+                this.progression = data.progression;
+                this.originalProgression = JSON.parse(JSON.stringify(this.progression));
+                
+                // Set loop range
+                this.loopStart = 1;
+                this.loopEnd = 8; // First pattern (A1)
+                
+                // Update UI
+                const loopStartInput = document.getElementById('loopStart');
+                const loopEndInput = document.getElementById('loopEnd');
+                if (loopStartInput) loopStartInput.value = this.loopStart;
+                if (loopEndInput) loopEndInput.value = this.loopEnd;
+                
+                // Split into patterns
+                this.parseProgressionIntoPatterns();
+                
+                this.buildGrid();
+                this.buildDrumGrid();
+                this.updateDrumZoom();
+                this.analyzeProgression();
+                
+                // Initialize loop slider AFTER progression is loaded
+                this.initLoopSlider();
+                
+                // Force update loop slider after a short delay
+                setTimeout(() => {
+                    if (this.updateLoopSlider) {
+                        this.updateLoopSlider();
+                    }
+                }, 100);
+                
+                console.log('✓ Loaded', this.progression.length, 'bars with exact MIDI notes from file');
+                console.log('Loop range:', this.loopStart, '-', this.loopEnd);
+            })
+            .catch(error => {
+                console.error('Could not load combined_progression.json:', error);
+                // Fallback to parseChords if file not found
+                this.parseChords();
+            });
+    }
+    
+    parseProgressionIntoPatterns() {
+        // Split progression into 8-bar patterns
+        const patternNames = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4'];
+        this.patterns = {};
+        
+        for (let i = 0; i < this.progression.length; i += 8) {
+            const patternBars = this.progression.slice(i, i + 8);
+            const patternName = patternNames[Math.floor(i / 8)];
+            
+            if (patternName && patternBars.length > 0) {
+                this.patterns[patternName] = {
+                    progression: patternBars,
+                    drumPatterns: {},
+                    notes: {}
+                };
+                
+                const btn = document.querySelector(`.pattern-btn[data-pattern="${patternName}"]`);
+                if (btn) btn.classList.add('has-data');
+            }
+        }
+        
+        this.currentPattern = 'A1';
+        console.log('Loaded default progression with', this.progression.length, 'bars');
     }
 
     initLoopSlider() {
