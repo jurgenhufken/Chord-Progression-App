@@ -989,6 +989,27 @@ class ChordProgressionApp {
         this.buildGrid();
     }
 
+    loadPreset(presetName) {
+        const presets = {
+            'cm': `| Cm/Eb | Fm | Ab | Gsus4 G7 |
+| Cm/Ab | Fm | Gsus4 G7 | Cm |`,
+            'am': `| Am | Dm | Gsus4 G | C |
+| F | Dm | Bdim E7 | Am |
+| Am | F | Dsus4 D | G |
+| C | F | Gsus4 G | Am |
+| Am | Dm | Gsus4 G | C |
+| F | Dm | Bdim E7 | Am |
+| Am | F | Dsus4 D | G |
+| C | F | Gsus4 G | Am |`
+        };
+        
+        const textarea = document.getElementById('chordInput');
+        if (textarea && presets[presetName]) {
+            textarea.value = presets[presetName];
+            this.parseChords();
+        }
+    }
+    
     parseChords() {
         const input = document.getElementById('chordInput').value;
         const lines = input.split('\n').filter(line => line.trim());

@@ -53,16 +53,16 @@
             <aside class="sidebar">
                 <div class="section">
                     <label for="chordInput">Chord Progression:</label>
-                    <textarea id="chordInput" placeholder="e.g., | Am | F | C | G |">| Am | Dm | Gsus4 G | C |
-| F | Dm | Bdim E7 | Am |
-| Am | F | Dsus4 D | G |
-| C | F | Gsus4 G | Am |
-| Am | Dm | Gsus4 G | C |
-| F | Dm | Bdim E7 | Am |
-| Am | F | Dsus4 D | G |
-| C | F | Gsus4 G | Am |</textarea>
+                    <textarea id="chordInput" placeholder="e.g., | Am | F | C | G |">| Cm/Eb | Fm | Ab | Gsus4 G7 |
+| Cm/Ab | Fm | Gsus4 G7 | Cm |</textarea>
                     <button id="parseBtn" class="btn-primary">Parse</button>
                     <button id="parseWithBeats" class="btn-primary">🎲 Parse + Beats</button>
+                    
+                    <!-- Preset Buttons -->
+                    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                        <button class="btn-secondary" onclick="app.loadPreset('cm')">Cm Ballad</button>
+                        <button class="btn-secondary" onclick="app.loadPreset('am')">Am Classic</button>
+                    </div>
                 </div>
 
                 <div class="section">
