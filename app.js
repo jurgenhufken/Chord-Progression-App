@@ -991,8 +991,10 @@ class ChordProgressionApp {
 
     loadPreset(presetName) {
         const presets = {
-            'cm': `| Cm/Eb | Fm | Ab | Gsus4 G7 |
-| Cm/Ab | Fm | Gsus4 G7 | Cm |`,
+            'cm': `| Cm | G | Ab | Cm/Eb |
+| Fm | Fm/Db | G | Cm |
+| C | Fm | Ab | G |
+| Cm/Eb | Fm | G | Cm |`,
             'am': `| Am | Dm | Gsus4 G | C |
 | F | Dm | Bdim E7 | Am |
 | Am | F | Dsus4 D | G |
