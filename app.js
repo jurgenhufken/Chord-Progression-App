@@ -399,6 +399,13 @@ class ChordProgressionApp {
         });
         
         document.getElementById('parseWithBeats')?.addEventListener('click', () => {
+            // DEBUG: Save progression before
+            const beforeBars9to16 = JSON.parse(JSON.stringify(this.progression.slice(8, 16)));
+            console.log('BEFORE Parse+Beats - Bars 9-16:', beforeBars9to16.map(b => ({
+                bar: b.barNum,
+                notes: b.chords[0].midiNotes
+            })));
+            
             // Only parse if textarea has content
             const textarea = document.getElementById('chordInput');
             if (textarea && textarea.value.trim()) {
@@ -414,6 +421,29 @@ class ChordProgressionApp {
             if (this.patterns[this.currentPattern]) {
                 this.drumPatterns = JSON.parse(JSON.stringify(this.patterns[this.currentPattern].drumPatterns));
                 this.buildDrumGrid();
+            }
+            
+            // DEBUG: Check progression after
+            const afterBars9to16 = this.progression.slice(8, 16);
+            console.log('AFTER Parse+Beats - Bars 9-16:', afterBars9to16.map(b => ({
+                bar: b.barNum,
+                notes: b.chords[0].midiNotes
+            })));
+            
+            // Compare
+            let changed = false;
+            beforeBars9to16.forEach((before, i) => {
+                const after = afterBars9to16[i];
+                const beforeNotes = JSON.stringify(before.chords[0].midiNotes);
+                const afterNotes = JSON.stringify(after.chords[0].midiNotes);
+                if (beforeNotes !== afterNotes) {
+                    console.warn(`⚠️ Bar ${after.barNum} CHANGED: ${beforeNotes} → ${afterNotes}`);
+                    changed = true;
+                }
+            });
+            
+            if (!changed) {
+                console.log('✓ No changes to bars 9-16');
             }
             
             console.log('Generated beats for all patterns');
