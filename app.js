@@ -764,6 +764,10 @@ class ChordProgressionApp {
         
         this.isBoxSelecting = true;
         this.boxSelectStart = { x: e.clientX, y: e.clientY };
+        this.boxSelectionBase = new Set(this.selectedNotes);
+        this.boxSelectionTemp = new Set(this.selectedNotes);
+        this.lastTouchedNotes = null;
+        document.querySelectorAll('.note-block.box-preview').forEach(block => block.classList.remove('box-preview'));
         
         // Create selection box element
         this.selectionBox = document.createElement('div');
@@ -776,89 +780,98 @@ class ChordProgressionApp {
 
     handleBoxSelectMove = (e) => {
         if (!this.isBoxSelecting) return;
-        
+
         const startX = Math.min(this.boxSelectStart.x, e.clientX);
         const startY = Math.min(this.boxSelectStart.y, e.clientY);
         const width = Math.abs(e.clientX - this.boxSelectStart.x);
         const height = Math.abs(e.clientY - this.boxSelectStart.y);
-        
+
         this.selectionBox.style.left = startX + 'px';
         this.selectionBox.style.top = startY + 'px';
         this.selectionBox.style.width = width + 'px';
         this.selectionBox.style.height = height + 'px';
-        
-        // Play notes as they get selected (real-time preview)
+
         const boxRect = this.selectionBox.getBoundingClientRect();
-        const currentlyTouched = new Set();
-        
+        const touchedMidis = new Set();
+        const currentKeys = new Set();
+        const selectedMidiNotes = [];
+
         document.querySelectorAll('.note-block').forEach(noteBlock => {
             const noteRect = noteBlock.getBoundingClientRect();
-            
-            if (!(noteRect.right < boxRect.left || 
-                  noteRect.left > boxRect.right || 
-                  noteRect.bottom < boxRect.top || 
+
+            if (!(noteRect.right < boxRect.left ||
+                  noteRect.left > boxRect.right ||
+                  noteRect.bottom < boxRect.top ||
                   noteRect.top > boxRect.bottom)) {
-                const midi = parseInt(noteBlock.dataset.midi);
-                currentlyTouched.add(midi);
-                
-                // Play note if newly touched
+                const midi = parseInt(noteBlock.dataset.midi, 10);
+                touchedMidis.add(midi);
+
                 if (!this.lastTouchedNotes || !this.lastTouchedNotes.has(midi)) {
                     this.playNote(midi);
                 }
-            }
-        });
-        
-        this.lastTouchedNotes = currentlyTouched;
-        
-        document.querySelectorAll('.note-block').forEach(noteBlock => {
-            const noteRect = noteBlock.getBoundingClientRect();
-            
-            // Check if note intersects with selection box
-            if (!(noteRect.right < boxRect.left || 
-                  noteRect.left > boxRect.right || 
-                  noteRect.bottom < boxRect.top || 
-                  noteRect.top > boxRect.bottom)) {
-                // Note is within selection
-                noteBlock.classList.add('selected');
+
                 const key = `${noteBlock.dataset.midi}-${noteBlock.dataset.barIndex}-${noteBlock.dataset.chordIndex}`;
-                this.selectedNotes.add(key);
-                
-                // Track which bar this note belongs to
-                selectedBarIndices.add(parseInt(noteBlock.dataset.barIndex));
-                
-                // Collect MIDI notes for preview
-                const midi = parseInt(noteBlock.dataset.midi);
+                currentKeys.add(key);
+
                 if (!selectedMidiNotes.includes(midi)) {
                     selectedMidiNotes.push(midi);
                 }
             }
         });
-        
-        // Play selected notes as a chord
+
+        this.lastTouchedNotes = touchedMidis;
+
+        const combinedSelection = new Set(this.boxSelectionBase || []);
+        currentKeys.forEach(key => combinedSelection.add(key));
+        this.boxSelectionTemp = combinedSelection;
+
+        document.querySelectorAll('.note-block.box-preview').forEach(block => block.classList.remove('box-preview'));
+        currentKeys.forEach(key => {
+            const [midi, barIdx, chordIdx] = key.split('-');
+            const selector = `.note-block[data-midi="${midi}"][data-bar-index="${barIdx}"][data-chord-index="${chordIdx}"]`;
+            const block = document.querySelector(selector);
+            if (block && !this.boxSelectionBase?.has(key)) {
+                block.classList.add('box-preview');
+            }
+        });
+
         if (selectedMidiNotes.length > 0) {
             selectedMidiNotes.forEach(midi => this.playNote(midi));
         }
-        
-        // Select the first bar that has selected notes
-        if (selectedBarIndices.size > 0) {
-            const firstBarIdx = Math.min(...Array.from(selectedBarIndices));
-            this.selectBar(firstBarIdx);
-        }
-        
-        // Cleanup
+    }
+
+    handleBoxSelectEnd = () => {
+        if (!this.isBoxSelecting) return;
+
+        this.isBoxSelecting = false;
+
         if (this.selectionBox) {
             document.body.removeChild(this.selectionBox);
             this.selectionBox = null;
         }
+
         document.removeEventListener('mousemove', this.handleBoxSelectMove);
         document.removeEventListener('mouseup', this.handleBoxSelectEnd);
-        this.isBoxSelecting = false;
+
+        if (this.boxSelectionTemp) {
+            this.selectedNotes = new Set(this.boxSelectionTemp);
+        }
+
+        document.querySelectorAll('.note-block.box-preview').forEach(block => block.classList.remove('box-preview'));
+        this.updateNoteSelection();
+
+        if (this.selectedNotes.size > 0) {
+            const barIndices = Array.from(this.selectedNotes).map(key => parseInt(key.split('-')[1], 10));
+            if (barIndices.length > 0) {
+                const firstBarIdx = Math.min(...barIndices);
+                this.selectBar(firstBarIdx);
+            }
+        }
+
         this.boxSelectStart = null;
-        
-        console.log('Selected notes:', this.selectedNotes.size, 'in bars:', Array.from(selectedBarIndices));
-        
-        // Update interval analysis after box selection
-        this.updateIntervalAnalysis();
+        this.boxSelectionBase = null;
+        this.boxSelectionTemp = null;
+        this.lastTouchedNotes = null;
     }
 
     handleKeyboard(e) {
@@ -944,48 +957,21 @@ class ChordProgressionApp {
             // Remove focus from button so keyboard shortcuts work
             btn.blur();
         }
-        
+
+        // Rebuild grid so note blocks update their handles/listeners for the new mode
+        this.buildGrid();
+
         // Update cursor on piano cells
         document.querySelectorAll('.piano-cell').forEach(cell => {
             cell.style.cursor = this.editMode ? 'crosshair' : 'default';
         });
-        
-        if (!this.editMode) {
+
+        if (this.editMode) {
+            // Restore visual selection after rebuild
+            this.updateNoteSelection();
+        } else {
             this.deselectAllNotes();
         }
-    }
-
-    toggleOriginalModified() {
-        if (this.originalProgression.length === 0) return;
-        
-        this.isModified = !this.isModified;
-        
-        if (this.isModified) {
-            // Show modified version
-            this.buildGrid();
-        } else {
-            // Show original version
-            const temp = JSON.parse(JSON.stringify(this.progression));
-            this.progression = JSON.parse(JSON.stringify(this.originalProgression));
-            this.buildGrid();
-            this.progression = temp;
-        }
-        
-        const btn = document.getElementById('toggleOriginal');
-        if (btn) {
-            btn.textContent = this.isModified ? '📝 Modified' : '📄 Original';
-        }
-    }
-
-    clearAllNotes() {
-        if (!confirm('Clear all notes? This will remove all chords.')) return;
-        
-        this.progression = this.progression.map(bar => ({
-            ...bar,
-            chords: []
-        }));
-        
-        this.buildGrid();
     }
 
     togglePianoRollView() {
@@ -1236,10 +1222,26 @@ class ChordProgressionApp {
         // Build vertical ruler
         this.buildVerticalRuler();
         
-        // Chord row
-        this.addCell(container, 'Chords', 'grid-label');
+        // Chord row rendered separately so it stays fixed
+        const chordHeader = document.getElementById('chordHeader');
+        if (chordHeader) {
+            chordHeader.innerHTML = '';
+        }
+        
+        const headerGrid = document.createElement('div');
+        headerGrid.className = 'chord-header-grid';
+        headerGrid.style.display = 'grid';
+        headerGrid.style.gridTemplateColumns = `80px repeat(${numBars}, ${this.barWidth}px)`;
+        headerGrid.style.alignItems = 'stretch';
+        
+        const labelCell = document.createElement('div');
+        labelCell.className = 'grid-label chord-header-label';
+        labelCell.textContent = 'Chords';
+        headerGrid.appendChild(labelCell);
+        
         this.progression.forEach((bar, i) => {
-            const cell = this.addCell(container, '', 'grid-cell chord-cell');
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell chord-cell chord-header-fixed';
             cell.dataset.barIndex = i;
             
             // Highlight loop range
@@ -1248,7 +1250,6 @@ class ChordProgressionApp {
                 cell.style.boxShadow = 'inset 0 0 0 3px rgba(0, 212, 255, 0.3)';
             }
             
-            // Make cell a flex container for sub-bars
             cell.style.display = 'flex';
             cell.style.flexDirection = 'column';
             cell.style.position = 'relative';
@@ -1262,7 +1263,6 @@ class ChordProgressionApp {
             barNumLabel.style.zIndex = '10';
             cell.appendChild(barNumLabel);
             
-            // Top bar controls (above chord)
             const topControls = document.createElement('div');
             topControls.className = 'bar-controls bar-controls-top';
             
@@ -1298,17 +1298,15 @@ class ChordProgressionApp {
             
             cell.appendChild(topControls);
             
-            // Sub-bars container (horizontal layout for multiple chords)
             const subBarsContainer = document.createElement('div');
             subBarsContainer.style.display = 'flex';
             subBarsContainer.style.flex = '1';
             subBarsContainer.style.gap = '2px';
             
-            // Create a sub-bar for each chord
             bar.chords.forEach((chord, chordIdx) => {
                 const subBar = document.createElement('div');
                 subBar.className = 'sub-bar';
-                subBar.style.flex = '1'; // Equal width for now
+                subBar.style.flex = '1';
                 subBar.style.display = 'flex';
                 subBar.style.flexDirection = 'column';
                 subBar.style.justifyContent = 'center';
@@ -1321,14 +1319,12 @@ class ChordProgressionApp {
                 subBar.dataset.barIndex = i;
                 subBar.dataset.chordIndex = chordIdx;
                 
-                // Chord label
                 const chordLabel = document.createElement('div');
                 chordLabel.textContent = chord.symbol || '-';
                 chordLabel.className = 'chord-label';
                 chordLabel.style.fontSize = '0.9rem';
                 subBar.appendChild(chordLabel);
                 
-                // Delete sub-bar button (only if more than 1 chord)
                 if (bar.chords.length > 1) {
                     const delSubBtn = document.createElement('button');
                     delSubBtn.textContent = '×';
@@ -1342,13 +1338,11 @@ class ChordProgressionApp {
                     subBar.appendChild(delSubBtn);
                 }
                 
-                // Click handler for sub-bar selection
                 subBar.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.selectSubBar(i, chordIdx);
                 });
                 
-                // Hover effect
                 subBar.addEventListener('mouseenter', () => {
                     if (!subBar.classList.contains('selected-sub-bar')) {
                         subBar.style.background = 'rgba(0, 212, 255, 0.1)';
@@ -1365,7 +1359,6 @@ class ChordProgressionApp {
             
             cell.appendChild(subBarsContainer);
             
-            // Bottom note controls (below chord)
             const bottomControls = document.createElement('div');
             bottomControls.className = 'bar-controls bar-controls-bottom';
             
@@ -1411,30 +1404,26 @@ class ChordProgressionApp {
             
             cell.appendChild(bottomControls);
             
-            // Double-click to edit chord text
             cell.addEventListener('dblclick', (e) => {
                 e.stopPropagation();
                 this.editChordText(i, cell);
             });
             
             cell.addEventListener('click', (e) => {
-                // Don't trigger if clicking on buttons
                 if (e.target.classList.contains('chord-action-btn')) return;
-                
-                // Select this bar (for editing, NOT for playback)
                 this.selectBar(i);
-                
-                // DON'T jump playhead during playback - let user edit freely
-                // Only jump if NOT playing
-                if (!this.isPlaying) {
-                    // Preview chord if it exists
-                    if (bar.chords.length > 0 && bar.chords[0]) {
-                        this.previewBar(i);
-                        this.analyzeChord(bar.chords[0]);
-                    }
+                if (!this.isPlaying && bar.chords.length > 0 && bar.chords[0]) {
+                    this.previewBar(i);
+                    this.analyzeChord(bar.chords[0]);
                 }
             });
+            
+            headerGrid.appendChild(cell);
         });
+        
+        if (chordHeader) {
+            chordHeader.appendChild(headerGrid);
+        }
         
         // Piano roll rows (only if enabled)
         if (this.showPianoRoll) {

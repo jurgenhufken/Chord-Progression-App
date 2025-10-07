@@ -68,6 +68,7 @@
                 <div class="section">
                     <h3>View</h3>
                     <button id="togglePianoRoll" class="btn-secondary">👁️ Piano Roll</button>
+                    <button id="toggleEditMode" class="btn-secondary">✏️ Edit</button>
                     <label>Range: 
                         <select id="pianoRange">
                             <option value="auto" selected>Auto (Smart)</option>
@@ -489,6 +490,8 @@
                 
                 <!-- Grid Wrapper for horizontal scroll -->
                 <div class="grid-wrapper">
+                    <div id="chordHeader" class="chord-header-row"></div>
+
                     <!-- Vertical Ruler (Bar Numbers) -->
                     <div class="vertical-ruler" id="verticalRuler"></div>
                     

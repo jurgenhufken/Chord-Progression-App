@@ -470,6 +470,32 @@ input[type="range"] {
     transition: height 0.05s ease-out;
 }
 
+.chord-header-row {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: #1a1a1a;
+    padding: 6px 0;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.chord-header-grid {
+    display: grid;
+    gap: var(--bar-gap);
+    align-items: stretch;
+}
+
+.chord-header-label {
+    position: sticky;
+    left: 0;
+    z-index: 30;
+    background: #2a2a2a;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    padding-left: 0.5rem;
+}
+
 .fader-controls {
     display: flex;
     flex-direction: column;
@@ -569,18 +595,20 @@ input[type="range"] {
     --label-width: 80px;
     --bar-width: 140px;    /* Calculated so 8 bars fit on screen */
     --bar-gap: 0px;
+    --chord-header-height: 120px;
 }
 
-/* Grid Container Wrapper - no scroll for 8 bars */
+/* Grid Container Wrapper */
 .grid-wrapper {
     position: relative;
-    overflow: visible !important;
+    overflow: auto;
     max-width: 100%;
     background: #1a1a1a;
     flex: 1;
     min-height: 600px;
     display: flex;
     flex-direction: column;
+    scroll-padding-top: var(--chord-header-height);
 }
 /* Grid Container */
 .grid-container {
@@ -624,7 +652,7 @@ input[type="range"] {
     padding-left: var(--label-width);
     background: #1a1a1a;
     position: sticky;
-    top: 0;
+    top: var(--chord-header-height);
     z-index: 10;
 }
 
@@ -666,6 +694,7 @@ input[type="range"] {
     position: relative;
     border-right: 1px solid #333;
     transition: background 0.2s;
+    z-index: 1;
 }
 
 .grid-cell.grid-label {
@@ -679,12 +708,17 @@ input[type="range"] {
     padding-left: 0.5rem;
 }
 
-/* Chords label should be sticky both vertically and horizontally */
-.grid-label:first-child {
+/* Chord header row stays visible while scrolling */
+.chord-header {
     position: sticky;
     top: 0;
+    z-index: 12;
+    background: #1a1a1a;
+}
+
+.grid-label.chord-header {
     left: 0;
-    z-index: 15;
+    z-index: 20;
     background: #2a2a2a;
 }
 
@@ -1153,6 +1187,12 @@ input[type="range"] {
     box-shadow: 0 0 15px rgba(255, 107, 107, 1), 0 0 25px rgba(255, 107, 107, 0.6) !important;
     z-index: 100 !important;
     transform: scale(1.1);
+}
+
+.note-block.box-preview {
+    outline: 2px dashed rgba(0, 212, 255, 0.7);
+    box-shadow: 0 0 12px rgba(0, 212, 255, 0.5);
+    z-index: 90;
 }
 
 /* Resize Handles */
