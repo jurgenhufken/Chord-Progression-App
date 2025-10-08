@@ -36,8 +36,13 @@ class ChordProgressionApp {
         this.linkScroll = true; // Link piano roll and drum sequencer scroll
         
         // Pattern system
-        this.patterns = {}; // { 'A1': { progression: [...], drumPatterns: {...}, notes: {...} } }
+        this.patterns = {}; // { 'A1': { progression: [...], drumPatterns: {...}, notes: {...}, channel2Notes: {...} } }
         this.currentPattern = 'A1';
+        
+        // Channel 2 state
+        this.channel2Notes = {}; // { barIndex: [{ midi: 60, start: 0, duration: 0.5 }, ...] }
+        this.channel2Synth = null;
+        this.progressionAnalysis = null; // Cached chord analysis
         this.songMode = false; // false = pattern mode, true = song mode
         this.chainPatterns = true; // Chain all filled patterns in sequence (default ON)
         this.loopChain = true; // Loop back to first pattern after last (default ON)
@@ -63,6 +68,8 @@ class ChordProgressionApp {
         
         // View settings
         this.showPianoRoll = true;
+        this.showChannel2 = true; // Channel 2 ON by default
+        this.channel2Mode = 'separate'; // 'overlay' or 'separate' - separate by default
         this.pianoRange = 'auto'; // 'auto' or 'full'
         
         // Suggestions
@@ -109,6 +116,19 @@ class ChordProgressionApp {
         this.setupEventListeners();
         this.buildPatternMatrix();
         
+        // Update UI to reflect default Channel 2 state
+        const ch2Btn = document.getElementById('toggleChannel2');
+        const ch2ModeBtn = document.getElementById('toggleChannel2Mode');
+        if (ch2Btn) {
+            ch2Btn.textContent = '🎶 Channel 2 ON';
+            ch2Btn.classList.add('active');
+        }
+        if (ch2ModeBtn) {
+            ch2ModeBtn.style.display = 'inline-block';
+            ch2ModeBtn.textContent = '📊 Separate';
+            ch2ModeBtn.classList.add('active');
+        }
+        
         // Set loop button active by default
         const loopBtn = document.getElementById('loopBtn');
         if (loopBtn) loopBtn.classList.add('active');
@@ -144,6 +164,13 @@ class ChordProgressionApp {
                 this.buildDrumGrid();
                 this.updateDrumZoom();
                 this.analyzeProgression();
+                
+                // Generate Channel 2 pattern if enabled
+                if (this.showChannel2) {
+                    this.generateChannel2Pattern();
+                    // Rebuild grid to show Channel 2 notes
+                    this.buildGrid();
+                }
                 
                 // Initialize loop slider AFTER progression is loaded
                 this.initLoopSlider();
@@ -389,6 +416,23 @@ class ChordProgressionApp {
         
         // Create drum sounds
         this.createDrumSounds();
+        
+        // Create Channel 2 synth (different sound)
+        this.channel2Synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: { 
+                type: 'sine',  // Cleaner sound for melodies
+                partials: [1, 0.3, 0.1]
+            },
+            envelope: {
+                attack: 0.02,
+                decay: 0.3,
+                sustain: 0.4,
+                release: 0.8
+            }
+        });
+        
+        this.channel2Synth.connect(this.reverb); // Connect to same reverb
+        this.channel2Synth.volume.value = -25; // Slightly quieter
         
         this.synth.volume.value = -20;
     }
@@ -646,6 +690,8 @@ class ChordProgressionApp {
         
         // View controls
         document.getElementById('togglePianoRoll')?.addEventListener('click', () => this.togglePianoRollView());
+        document.getElementById('toggleChannel2')?.addEventListener('click', () => this.toggleChannel2View());
+        document.getElementById('toggleChannel2Mode')?.addEventListener('click', () => this.toggleChannel2Mode());
         document.getElementById('pianoRange')?.addEventListener('change', (e) => {
             this.pianoRange = e.target.value;
             this.buildGrid();
@@ -1089,6 +1135,92 @@ class ChordProgressionApp {
             btn.classList.toggle('active', this.showPianoRoll);
         }
         this.buildGrid();
+    }
+
+    toggleChannel2View() {
+        this.showChannel2 = !this.showChannel2;
+        const btn = document.getElementById('toggleChannel2');
+        const modeBtn = document.getElementById('toggleChannel2Mode');
+        
+        if (btn) {
+            btn.textContent = this.showChannel2 ? '🎶 Channel 2 ON' : '🎶 Channel 2';
+            btn.classList.toggle('active', this.showChannel2);
+        }
+        
+        // Show/hide mode toggle button
+        if (modeBtn) {
+            modeBtn.style.display = this.showChannel2 ? 'inline-block' : 'none';
+        }
+        
+        if (this.showChannel2) {
+            console.log('Channel 2 activated! 🎵');
+            this.generateChannel2Pattern();
+        } else {
+            console.log('Channel 2 deactivated');
+            this.clearChannel2Pattern();
+        }
+        
+        this.buildGrid();
+    }
+
+    toggleChannel2Mode() {
+        this.channel2Mode = this.channel2Mode === 'overlay' ? 'separate' : 'overlay';
+        const btn = document.getElementById('toggleChannel2Mode');
+        if (btn) {
+            btn.textContent = this.channel2Mode === 'separate' ? '📊 Separate' : '🔗 Overlay';
+            btn.classList.toggle('active', this.channel2Mode === 'separate');
+        }
+        
+        console.log('Channel 2 mode:', this.channel2Mode);
+        this.buildGrid();
+    }
+
+    generateChannel2Pattern() {
+        if (!this.progression || this.progression.length === 0) {
+            console.log('No progression to analyze');
+            return;
+        }
+
+        // Analyze progression with ChordAnalyzer
+        const analyzer = new ChordAnalyzer();
+        this.progressionAnalysis = analyzer.analyzeProgression(this.progression);
+        
+        console.log('Chord analysis:', this.progressionAnalysis);
+        
+        // Generate simple arpeggio pattern
+        this.channel2Notes = {};
+        
+        this.progression.forEach((bar, barIndex) => {
+            const analysis = this.progressionAnalysis[barIndex];
+            if (!analysis || !analysis.analysis) return;
+            
+            const chordTones = analysis.analysis.pitchClasses;
+            const scaleNotes = analysis.analysis.scaleNotes;
+            
+            // Generate arpeggio: chord tones + scale notes
+            const availableNotes = [...chordTones, ...scaleNotes].filter((note, index, arr) => arr.indexOf(note) === index);
+            
+            // Create melody notes in octave 4-5
+            const melodyNotes = availableNotes.map(note => note + 60); // C4 = 60
+            
+            // Simple arpeggio pattern: 4 notes per bar
+            this.channel2Notes[barIndex] = [];
+            for (let i = 0; i < 4; i++) {
+                const noteIndex = i % melodyNotes.length;
+                this.channel2Notes[barIndex].push({
+                    midi: melodyNotes[noteIndex],
+                    start: i * 0.25, // Quarter notes
+                    duration: 0.2
+                });
+            }
+        });
+        
+        console.log('Generated Channel 2 pattern:', this.channel2Notes);
+    }
+
+    clearChannel2Pattern() {
+        this.channel2Notes = {};
+        this.progressionAnalysis = null;
     }
 
     changeZoom(octaves) {
@@ -1614,14 +1746,48 @@ class ChordProgressionApp {
                         }
                     });
                     
-                    // Add existing notes
+                    // Add existing notes (Channel 1)
                     bar.chords.forEach((chord, chordIdx) => {
                         if (chord && chord.midiNotes.includes(midiNote)) {
-                            this.addNoteBlock(cell, midiNote, barIdx, chordIdx, bar.chords.length, chord.symbol);
+                            this.addNoteBlock(cell, midiNote, barIdx, chordIdx, bar.chords.length, chord.symbol, 'channel1');
                         }
                     });
+                    
+                    // Add Channel 2 notes (if enabled and in overlay mode)
+                    if (this.showChannel2 && this.channel2Mode === 'overlay' && this.channel2Notes[barIdx]) {
+                        this.channel2Notes[barIdx].forEach((note, noteIdx) => {
+                            if (note.midi === midiNote) {
+                                this.addChannel2NoteBlock(cell, midiNote, barIdx, noteIdx, note);
+                            }
+                        });
+                    }
                 });
             }
+        }
+        
+        // Add separate Channel 2 section if in separate mode
+        if (this.showChannel2 && this.channel2Mode === 'separate') {
+            // Calculate range if not already done
+            let ch2MinMidi = minMidi || 48;
+            let ch2MaxMidi = maxMidi || 84;
+            let ch2NumNotes = actualNumNotes || (ch2MaxMidi - ch2MinMidi + 1);
+            
+            // If piano roll was off, calculate range from Channel 2 notes
+            if (!this.showPianoRoll) {
+                ch2MinMidi = 127;
+                ch2MaxMidi = 0;
+                Object.values(this.channel2Notes).forEach(notes => {
+                    notes.forEach(note => {
+                        ch2MinMidi = Math.min(ch2MinMidi, note.midi);
+                        ch2MaxMidi = Math.max(ch2MaxMidi, note.midi);
+                    });
+                });
+                ch2MinMidi = Math.max(0, ch2MinMidi - 6);
+                ch2MaxMidi = Math.min(127, ch2MaxMidi + 6);
+                ch2NumNotes = ch2MaxMidi - ch2MinMidi + 1;
+            }
+            
+            this.buildChannel2Section(container, ch2MinMidi, ch2MaxMidi, ch2NumNotes);
         }
         
         // Restore selected bar visual state after rebuild
@@ -1641,7 +1807,7 @@ class ChordProgressionApp {
         return cell;
     }
 
-    addNoteBlock(cell, midiNote, barIdx, chordIdx, totalChords, symbol) {
+    addNoteBlock(cell, midiNote, barIdx, chordIdx, totalChords, symbol, channel = 'channel1') {
         const noteBlock = document.createElement('div');
         noteBlock.className = 'note-block';
         noteBlock.dataset.midi = midiNote;
@@ -1672,6 +1838,59 @@ class ChordProgressionApp {
         
         cell.appendChild(noteBlock);
         return noteBlock;
+    }
+
+    addChannel2NoteBlock(cell, midiNote, barIdx, noteIdx, note) {
+        const noteBlock = document.createElement('div');
+        noteBlock.className = 'note-block channel2-note';
+        noteBlock.dataset.midi = midiNote;
+        noteBlock.dataset.barIndex = barIdx;
+        noteBlock.dataset.noteIndex = noteIdx;
+        noteBlock.dataset.channel = 'channel2';
+        
+        // Position based on note timing (start time within bar)
+        const width = note.duration * 100; // Duration as percentage
+        const left = note.start * 100; // Start time as percentage
+        noteBlock.style.width = `${Math.max(width, 5)}%`; // Min 5% width
+        noteBlock.style.left = `${left}%`;
+        noteBlock.style.backgroundColor = '#ff6b35'; // Orange for Channel 2
+        noteBlock.style.opacity = '0.8';
+        
+        cell.appendChild(noteBlock);
+        return noteBlock;
+    }
+
+    buildChannel2Section(container, minMidi, maxMidi, actualNumNotes) {
+        // Add Channel 2 header
+        this.addCell(container, 'Channel 2', 'grid-label channel2-header-label');
+        this.progression.forEach(() => {
+            this.addCell(container, '', 'grid-cell channel2-header-cell');
+        });
+        
+        // Add Channel 2 piano roll rows
+        for (let noteIdx = 0; noteIdx < actualNumNotes; noteIdx++) {
+            const midiNote = maxMidi - noteIdx;
+            const noteName = this.midiToNote(midiNote);
+            const isWhite = this.whiteKeys.includes(noteName.slice(0, -1));
+            
+            this.addCell(container, noteName, 'grid-label channel2-label');
+            
+            this.progression.forEach((bar, barIdx) => {
+                const cell = this.addCell(container, '', `grid-cell piano-cell channel2-cell ${isWhite ? 'white' : 'black'}`);
+                cell.dataset.midi = midiNote;
+                cell.dataset.barIndex = barIdx;
+                cell.dataset.channel = 'channel2';
+                
+                // Add Channel 2 notes
+                if (this.channel2Notes[barIdx]) {
+                    this.channel2Notes[barIdx].forEach((note, noteIdx) => {
+                        if (note.midi === midiNote) {
+                            this.addChannel2NoteBlock(cell, midiNote, barIdx, noteIdx, note);
+                        }
+                    });
+                }
+            });
+        }
     }
 
     handleResizeStart(e, noteBlock, side) {

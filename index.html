@@ -3,7 +3,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chord Progression Studio</title>
-    <link rel="stylesheet" href="styles.css?v=31">
+    <link rel="stylesheet" href="styles.css?v=34">
+    <style>
+    /* Channel 2 Grid Styling */
+    .channel2-header-label {
+        background: #ff6b35 !important;
+        color: white !important;
+        font-weight: bold;
+    }
+    .channel2-header-cell {
+        background: #ff6b35 !important;
+        opacity: 0.3;
+    }
+    .channel2-label {
+        background: #2a1a0f !important;
+        color: #ff6b35 !important;
+    }
+    .channel2-cell.white {
+        background: #2a2a2a !important;
+        border-color: #444 !important;
+    }
+    .channel2-cell.black {
+        background: #1a1a1a !important;
+        border-color: #333 !important;
+    }
+    .channel2-note {
+        background-color: #ff6b35 !important;
+        border: 1px solid #ff8c5c !important;
+    }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -67,6 +95,8 @@
                 <div class="section">
                     <h3>View</h3>
                     <button id="togglePianoRoll" class="btn-secondary">👁️ Piano Roll</button>
+                    <button id="toggleChannel2" class="btn-secondary">🎶 Channel 2</button>
+                    <button id="toggleChannel2Mode" class="btn-secondary" style="display: none;">📊 Separate</button>
                     <button id="toggleEditMode" class="btn-secondary">✏️ Edit</button>
                     <label>Range: 
                         <select id="pianoRange">
