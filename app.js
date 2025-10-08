@@ -48,6 +48,8 @@ class ChordProgressionApp {
         this.channel2Pattern = 'up';
         this.channel2Density = 'medium';
         this.channel2OctaveRange = 1;
+        this.channel2Presets = []; // Loaded from data/channel2Presets.json
+        this.channel2CurrentPreset = null; // Active preset object
         this.songMode = false; // false = pattern mode, true = song mode
         this.chainPatterns = true; // Chain all filled patterns in sequence (default ON)
         this.loopChain = true; // Loop back to first pattern after last (default ON)
@@ -200,12 +202,119 @@ class ChordProgressionApp {
                 
                 console.log('✓ Loaded', this.progression.length, 'bars with exact MIDI notes from file');
                 console.log('Loop range:', this.loopStart, '-', this.loopEnd);
+                
+                // Load Channel 2 presets
+                this.loadChannel2Presets();
             })
             .catch(error => {
                 console.error('Could not load combined_progression.json:', error);
                 // Fallback to parseChords if file not found
                 this.parseChords();
+                
+                // Still load presets
+                this.loadChannel2Presets();
             });
+    }
+    
+    loadChannel2Presets() {
+        fetch('data/channel2Presets.json')
+            .then(res => res.json())
+            .then(data => {
+                this.channel2Presets = data.presets || [];
+                console.log(`✅ Loaded ${this.channel2Presets.length} Channel 2 presets`);
+                
+                // Populate UI dropdowns
+                this.populateChannel2PresetUI();
+            })
+            .catch(error => {
+                console.warn('Could not load Channel 2 presets:', error);
+                this.channel2Presets = [];
+            });
+    }
+    
+    populateChannel2PresetUI() {
+        const presetSelect = document.getElementById('channel2Preset');
+        const categorySelect = document.getElementById('channel2Category');
+        
+        if (!presetSelect || !categorySelect) return;
+        
+        // Extract unique categories
+        const categories = [...new Set(this.channel2Presets.map(p => p.category))];
+        
+        // Populate category dropdown
+        categorySelect.innerHTML = '<option value="all" selected>All Categories</option>';
+        categories.forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.textContent = cat.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            categorySelect.appendChild(opt);
+        });
+        
+        // Populate preset dropdown (initially all)
+        this.updatePresetDropdown('all');
+        
+        // Event listeners
+        categorySelect.addEventListener('change', (e) => {
+            this.updatePresetDropdown(e.target.value);
+        });
+        
+        presetSelect.addEventListener('change', (e) => {
+            this.applyChannel2Preset(e.target.value);
+        });
+    }
+    
+    updatePresetDropdown(category) {
+        const presetSelect = document.getElementById('channel2Preset');
+        if (!presetSelect) return;
+        
+        const filtered = category === 'all' 
+            ? this.channel2Presets 
+            : this.channel2Presets.filter(p => p.category === category);
+        
+        presetSelect.innerHTML = '<option value="" selected>-- Manual Mode --</option>';
+        
+        filtered.forEach(preset => {
+            const opt = document.createElement('option');
+            opt.value = preset.id;
+            opt.textContent = preset.humanName;
+            presetSelect.appendChild(opt);
+        });
+    }
+    
+    applyChannel2Preset(presetId) {
+        if (!presetId) {
+            this.channel2CurrentPreset = null;
+            this.showChannel2Status('🎛️ Manual mode enabled', 'info');
+            console.log('🎛️ Manual mode enabled');
+            this.updateChannel2Display();
+            return;
+        }
+        
+        const preset = this.channel2Presets.find(p => p.id === presetId);
+        if (!preset) {
+            console.warn('Preset not found:', presetId);
+            this.showChannel2Status('⚠️ Preset not found', 'error');
+            return;
+        }
+        
+        this.channel2CurrentPreset = preset;
+        console.log('🎨 Applied preset:', preset.humanName);
+        this.showChannel2Status(`🎨 Applied: ${preset.humanName}`, 'success');
+        
+        // Apply preset settings
+        this.channel2Style = preset.style;
+        this.channel2Pattern = preset.defaultPattern;
+        this.channel2Density = 'medium'; // Use preset's noteDensity later
+        this.channel2OctaveRange = Math.round(preset.spread || 1);
+        
+        // Update display
+        this.updateChannel2Display();
+        
+        // Regenerate with preset
+        this.channel2Notes = {};
+        this.progressionAnalysis = null;
+        this.generateChannel2Pattern();
+        this.buildGrid();
     }
     
     parseProgressionIntoPatterns() {
@@ -803,10 +912,38 @@ class ChordProgressionApp {
             }
         });
         
-        document.getElementById('channel2Source')?.addEventListener('change', (e) => {
-            this.channel2Source = e.target.value;
-            this.generateChannel2Pattern();
-            this.buildGrid();
+        // Debounce timer for auto-regenerate
+        this.channel2RegenerateTimer = null;
+        
+        // Setup preset menu
+        this.setupPresetMenu();
+        
+        const autoRegenerate = (changeName) => {
+            // Clear any pending regeneration
+            if (this.channel2RegenerateTimer) {
+                clearTimeout(this.channel2RegenerateTimer);
+            }
+            
+            // Show feedback
+            this.showChannel2Status(`🔄 ${changeName} changed, updating...`, 'info');
+            
+            // Debounce: wait 300ms before regenerating
+            this.channel2RegenerateTimer = setTimeout(() => {
+                this.channel2Notes = {};
+                this.progressionAnalysis = null;
+                this.generateChannel2Pattern();
+                this.buildGrid();
+                this.showChannel2Status(`✅ Pattern updated with ${changeName}`, 'success');
+            }, 300);
+        };
+        
+        // Source radio buttons
+        document.querySelectorAll('input[name="channel2Source"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                this.channel2Source = e.target.value;
+                this.updateChannel2Display();
+                autoRegenerate('Source');
+            });
         });
         
         document.getElementById('channel2Style')?.addEventListener('change', (e) => {
@@ -815,26 +952,24 @@ class ChordProgressionApp {
             // Update pattern options based on style
             this.updateChannel2PatternOptions();
             
-            this.generateChannel2Pattern();
-            this.buildGrid();
+            autoRegenerate('Style');
         });
         
         document.getElementById('channel2Pattern')?.addEventListener('change', (e) => {
             this.channel2Pattern = e.target.value;
-            this.generateChannel2Pattern();
-            this.buildGrid();
+            autoRegenerate('Pattern');
         });
         
         document.getElementById('channel2Density')?.addEventListener('change', (e) => {
             this.channel2Density = e.target.value;
-            this.generateChannel2Pattern();
-            this.buildGrid();
+            this.updateChannel2Display();
+            autoRegenerate('Density');
         });
         
         document.getElementById('channel2OctaveRange')?.addEventListener('change', (e) => {
             this.channel2OctaveRange = parseInt(e.target.value);
-            this.generateChannel2Pattern();
-            this.buildGrid();
+            this.updateChannel2Display();
+            autoRegenerate('Octave Range');
         });
         
         const regenerateBtn = document.getElementById('regenerateChannel2');
@@ -862,13 +997,10 @@ class ChordProgressionApp {
         const regenerateAllBtn = document.getElementById('regenerateAllChannel2');
         if (regenerateAllBtn) {
             regenerateAllBtn.addEventListener('click', () => {
-                if (!confirm('Regenerate Channel 2 for ALL patterns? This will overwrite existing Channel 2 notes.')) {
-                    return;
-                }
-                
                 // Visual feedback
                 regenerateAllBtn.textContent = '⏳ Processing...';
                 regenerateAllBtn.disabled = true;
+                this.showChannel2Status('🔄 Regenerating all patterns...', 'info');
                 
                 setTimeout(() => {
                     let regeneratedCount = 0;
@@ -905,7 +1037,7 @@ class ChordProgressionApp {
                     regenerateAllBtn.textContent = '🔄 All Patterns';
                     regenerateAllBtn.disabled = false;
                     
-                    alert(`✅ Regenerated Channel 2 for ${regeneratedCount} patterns!`);
+                    this.showChannel2Status(`✅ Regenerated Channel 2 for ${regeneratedCount} patterns!`, 'success');
                 }, 100);
             });
         }
@@ -916,14 +1048,18 @@ class ChordProgressionApp {
                 const progressionBars = this.progression.length;
                 const channel2Bars = Object.keys(this.channel2Notes).length;
                 
-                if (channel2Bars === progressionBars) {
-                    alert('✅ Already synced!');
+                // Check if notes actually exist (not just empty object)
+                const hasActualNotes = Object.values(this.channel2Notes).some(notes => notes && notes.length > 0);
+                
+                if (channel2Bars === progressionBars && hasActualNotes) {
+                    this.showChannel2Status('✅ Already synced!', 'success');
                     return;
                 }
                 
                 // Visual feedback
                 syncBtn.textContent = '⏳ Syncing...';
                 syncBtn.disabled = true;
+                this.showChannel2Status('🔄 Generating pattern...', 'info');
                 
                 setTimeout(() => {
                     // Force regenerate to match progression
@@ -936,7 +1072,8 @@ class ChordProgressionApp {
                     syncBtn.textContent = '🔗 Sync to Progression';
                     syncBtn.disabled = false;
                     
-                    alert(`✅ Synced! Generated ${Object.keys(this.channel2Notes).length} bars.`);
+                    const totalNotes = Object.values(this.channel2Notes).reduce((sum, notes) => sum + (notes?.length || 0), 0);
+                    this.showChannel2Status(`✅ Synced! Generated ${Object.keys(this.channel2Notes).length} bars with ${totalNotes} notes.`, 'success');
                 }, 100);
             });
         }
@@ -1473,22 +1610,793 @@ class ChordProgressionApp {
         const progressionBars = this.progression.length;
         const channel2Bars = Object.keys(this.channel2Notes).length;
         
-        if (channel2Bars === 0) {
+        // Check if notes actually exist
+        const hasActualNotes = Object.values(this.channel2Notes).some(notes => notes && notes.length > 0);
+        const totalNotes = Object.values(this.channel2Notes).reduce((sum, notes) => sum + (notes?.length || 0), 0);
+        
+        if (!hasActualNotes || channel2Bars === 0) {
             statusEl.textContent = '⚠️ No pattern';
             statusEl.style.color = '#ff6b35';
         } else if (channel2Bars === progressionBars) {
-            statusEl.textContent = '✅ Synced';
+            statusEl.textContent = `✅ Synced (${totalNotes} notes)`;
             statusEl.style.color = '#4CAF50';
         } else {
             statusEl.textContent = `⚠️ Out of sync (${channel2Bars}/${progressionBars} bars)`;
             statusEl.style.color = '#ff9800';
         }
     }
+    
+    showChannel2Status(message, type = 'info') {
+        const statusMsg = document.getElementById('channel2StatusMessage');
+        if (!statusMsg) return;
+        
+        // Set color based on type
+        const colors = {
+            'success': '#4CAF50',
+            'error': '#ff6b35',
+            'warning': '#ff9800',
+            'info': '#00d4ff'
+        };
+        
+        statusMsg.textContent = message;
+        statusMsg.style.color = colors[type] || colors.info;
+        statusMsg.style.display = 'block';
+        
+        // Auto-hide after 3 seconds
+        setTimeout(() => {
+            statusMsg.style.display = 'none';
+        }, 3000);
+    }
 
+    setupPresetMenu() {
+        const menuBtn = document.getElementById('channel2PresetSelector');
+        const closeBtn = document.getElementById('closePresetMenu');
+        const overlay = document.getElementById('channel2PresetOverlay');
+        const searchInput = document.getElementById('channel2PresetSearch');
+        const treeViewSelect = document.getElementById('channel2TreeView');
+        const randomBtn = document.getElementById('randomChannel2');
+        const applyCurrentBtn = document.getElementById('applyPresetCurrentBtn');
+        const applyAllBtn = document.getElementById('applyPresetAllBtn');
+        
+        // Selected preset tracking
+        this.selectedPresetForModal = null;
+        
+        // Open menu
+        menuBtn?.addEventListener('click', () => {
+            this.openPresetMenu();
+        });
+        
+        // Close menu
+        closeBtn?.addEventListener('click', () => {
+            this.closePresetMenu();
+        });
+        
+        overlay?.addEventListener('click', () => {
+            this.closePresetMenu();
+        });
+        
+        // Search
+        searchInput?.addEventListener('input', (e) => {
+            this.filterPresets(e.target.value);
+        });
+        
+        // Tree view change
+        treeViewSelect?.addEventListener('change', (e) => {
+            this.buildTreeNav(e.target.value);
+        });
+        
+        // Random button
+        randomBtn?.addEventListener('click', () => {
+            this.selectRandomPreset();
+        });
+        
+        // Apply buttons
+        applyCurrentBtn?.addEventListener('click', () => {
+            this.stopPreview();
+            this.applyModalPreset(false); // Current pattern only (8 bars)
+        });
+        
+        applyAllBtn?.addEventListener('click', () => {
+            this.stopPreview();
+            this.applyModalPreset(true); // All patterns (16 bars)
+        });
+        
+        // Sync modal settings with sidebar on change
+        document.getElementById('channel2ModalSource')?.addEventListener('change', (e) => {
+            this.channel2Source = e.target.value;
+        });
+        
+        document.getElementById('channel2ModalDensity')?.addEventListener('change', (e) => {
+            this.channel2Density = e.target.value;
+        });
+        
+        document.getElementById('channel2ModalOctaves')?.addEventListener('change', (e) => {
+            this.channel2OctaveRange = parseInt(e.target.value);
+        });
+    }
+    
+    openPresetMenu() {
+        const menu = document.getElementById('channel2PresetMenu');
+        const overlay = document.getElementById('channel2PresetOverlay');
+        
+        if (menu && overlay) {
+            menu.style.display = 'flex';
+            overlay.style.display = 'block';
+            
+            // Sync modal settings with sidebar
+            document.getElementById('channel2ModalSource').value = this.channel2Source;
+            document.getElementById('channel2ModalDensity').value = this.channel2Density;
+            document.getElementById('channel2ModalOctaves').value = this.channel2OctaveRange;
+            
+            // Build tree and cards
+            this.buildTreeNav('category');
+            this.showAllPresetCards();
+        }
+    }
+    
+    closePresetMenu() {
+        const modal = document.getElementById('channel2PresetMenu');
+        const overlay = document.getElementById('channel2PresetOverlay');
+        if (modal) modal.style.display = 'none';
+        if (overlay) overlay.style.display = 'none';
+        
+        // Stop preview when closing
+        this.stopPreview();
+        
+        // Restore previous state if preview was active
+        if (this.previewState) {
+            this.channel2CurrentPreset = this.previewState.previousPreset;
+            this.channel2Notes = this.previewState.previousNotes;
+            this.previewState = null;
+            this.buildGrid();
+        }
+    }
+    
+    buildTreeNav(view) {
+        const treeContainer = document.getElementById('channel2TreeNav');
+        if (!treeContainer) {
+            console.warn('Tree container not found');
+            return;
+        }
+        
+        console.log(`Building tree nav with ${this.channel2Presets.length} presets`);
+        treeContainer.innerHTML = '';
+        
+        if (this.channel2Presets.length === 0) {
+            treeContainer.innerHTML = '<div style="color: #888; padding: 1rem;">No presets loaded</div>';
+            return;
+        }
+        
+        if (view === 'category') {
+            // Group by category
+            const categories = {};
+            this.channel2Presets.forEach(preset => {
+                if (!categories[preset.category]) {
+                    categories[preset.category] = [];
+                }
+                categories[preset.category].push(preset);
+            });
+            
+            console.log('Categories:', Object.keys(categories));
+            
+            // All presets option
+            const allItem = this.createTreeItem('📊 All', this.channel2Presets.length, () => {
+                this.showAllPresetCards();
+            });
+            treeContainer.appendChild(allItem);
+            
+            // Category items
+            Object.keys(categories).sort().forEach(cat => {
+                const catItem = this.createTreeItem(
+                    this.getCategoryIcon(cat) + ' ' + cat.replace(/_/g, ' '),
+                    categories[cat].length,
+                    () => {
+                        this.showPresetsByCategory(cat);
+                    },
+                    categories[cat]
+                );
+                treeContainer.appendChild(catItem);
+            });
+        }
+        // Add other views later (feel, density, era, flat)
+    }
+    
+    getCategoryIcon(category) {
+        const icons = {
+            'piano': '🎹',
+            'guitar_strum': '🎸',
+            'bass': '🎸',
+            'synth_arpeggio': '🎵',
+            'pads': '🎹',
+            'melody': '🎶',
+            'staccato': '⚡',
+            'ostinato': '🔁',
+            'percussive': '🥁',
+            'experimental': '🎲'
+        };
+        return icons[category] || '🎵';
+    }
+    
+    createTreeItem(label, count, onClick, children = null) {
+        const item = document.createElement('div');
+        item.style.marginBottom = '0.25rem';
+        
+        const header = document.createElement('div');
+        header.style.cssText = 'padding: 0.5rem; cursor: pointer; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;';
+        header.innerHTML = `
+            <span>${children ? '▶ ' : ''}${label}</span>
+            <span style="color: #666; font-size: 0.85rem;">(${count})</span>
+        `;
+        
+        header.addEventListener('click', onClick);
+        
+        header.addEventListener('mouseenter', () => {
+            header.style.background = '#2a2a2a';
+        });
+        
+        header.addEventListener('mouseleave', () => {
+            header.style.background = 'transparent';
+        });
+        
+        item.appendChild(header);
+        
+        // Add children if expandable
+        if (children) {
+            const childContainer = document.createElement('div');
+            childContainer.style.cssText = 'display: none; padding-left: 1rem; margin-top: 0.25rem;';
+            
+            children.forEach(preset => {
+                const childItem = document.createElement('div');
+                childItem.style.cssText = 'padding: 0.25rem 0.5rem; cursor: pointer; border-radius: 4px; font-size: 0.85rem;';
+                childItem.textContent = '• ' + preset.humanName.split('•')[1].trim();
+                
+                childItem.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.selectPresetInModal(preset.id);
+                });
+                
+                childItem.addEventListener('mouseenter', () => {
+                    childItem.style.background = '#2a2a2a';
+                });
+                
+                childItem.addEventListener('mouseleave', () => {
+                    childItem.style.background = 'transparent';
+                });
+                
+                childContainer.appendChild(childItem);
+            });
+            
+            item.appendChild(childContainer);
+            
+            // Toggle expand/collapse
+            let expanded = false;
+            header.addEventListener('click', () => {
+                expanded = !expanded;
+                childContainer.style.display = expanded ? 'block' : 'none';
+                header.querySelector('span').textContent = (expanded ? '▼ ' : '▶ ') + label;
+            });
+        }
+        
+        return item;
+    }
+    
+    showAllPresetCards() {
+        this.showPresetCards(this.channel2Presets);
+    }
+    
+    showPresetsByCategory(category) {
+        const filtered = this.channel2Presets.filter(p => p.category === category);
+        this.showPresetCards(filtered);
+    }
+    
+    showPresetCards(presets) {
+        const listContainer = document.getElementById('channel2PresetList');
+        if (!listContainer) return;
+        
+        listContainer.innerHTML = '';
+        
+        presets.forEach(preset => {
+            const card = document.createElement('div');
+            card.style.cssText = 'background: #0a0a0a; border: 2px solid transparent; border-radius: 8px; padding: 1rem; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; height: 180px;';
+            card.dataset.presetId = preset.id;
+            
+            // Check if selected
+            if (this.selectedPresetForModal?.id === preset.id) {
+                card.style.borderColor = '#00d4ff';
+                card.style.background = '#1a2a3a';
+            }
+            
+            // Icon
+            const icon = document.createElement('div');
+            icon.style.cssText = 'font-size: 2rem; margin-bottom: 0.5rem;';
+            icon.textContent = this.getCategoryIcon(preset.category);
+            card.appendChild(icon);
+            
+            // Name
+            const name = document.createElement('div');
+            name.style.cssText = 'font-weight: bold; font-size: 0.9rem; margin-bottom: 0.5rem; flex: 1;';
+            name.textContent = preset.humanName.split('•')[1]?.trim() || preset.humanName;
+            card.appendChild(name);
+            
+            // Tags
+            const tags = document.createElement('div');
+            tags.style.cssText = 'font-size: 0.75rem; color: #666;';
+            tags.textContent = preset.feelTags.slice(0, 2).join(' • ');
+            card.appendChild(tags);
+            
+            // Click handler
+            card.addEventListener('click', () => {
+                this.selectPresetInModal(preset.id);
+            });
+            
+            // Hover effect
+            card.addEventListener('mouseenter', () => {
+                if (this.selectedPresetForModal?.id !== preset.id) {
+                    card.style.borderColor = '#00d4ff';
+                }
+            });
+            
+            card.addEventListener('mouseleave', () => {
+                if (this.selectedPresetForModal?.id !== preset.id) {
+                    card.style.borderColor = 'transparent';
+                }
+            });
+            
+            listContainer.appendChild(card);
+        });
+    }
+    
+    selectPresetInModal(presetId) {
+        const preset = this.channel2Presets.find(p => p.id === presetId);
+        if (!preset) return;
+        
+        this.selectedPresetForModal = preset;
+        
+        // Update modal settings with preset defaults
+        document.getElementById('channel2ModalSource').value = 'midi'; // Always use MIDI for better tuning
+        document.getElementById('channel2ModalDensity').value = 'medium';
+        document.getElementById('channel2ModalOctaves').value = Math.round(preset.spread || 1);
+        
+        // Re-render current view
+        const currentCards = Array.from(document.querySelectorAll('#channel2PresetList [data-preset-id]'));
+        currentCards.forEach(card => {
+            if (card.dataset.presetId === presetId) {
+                card.style.borderColor = '#00d4ff';
+                card.style.background = '#1a2a3a';
+            } else {
+                card.style.borderColor = 'transparent';
+                card.style.background = '#0a0a0a';
+            }
+        });
+        
+        // LIVE PREVIEW: Generate and show immediately
+        this.previewPreset(preset);
+    }
+    
+    previewPreset(preset) {
+        // Store previous state for restore (only once)
+        if (!this.previewState) {
+            this.previewState = {
+                previousPreset: this.channel2CurrentPreset,
+                previousNotes: JSON.parse(JSON.stringify(this.channel2Notes))
+            };
+        }
+        
+        // Apply preset temporarily
+        this.channel2CurrentPreset = preset;
+        this.channel2Source = document.getElementById('channel2ModalSource').value;
+        this.channel2Density = document.getElementById('channel2ModalDensity').value;
+        this.channel2OctaveRange = parseInt(document.getElementById('channel2ModalOctaves').value);
+        
+        // Generate preview (only first 2 bars for speed)
+        const previewNotes = {};
+        const notesPerBar = preset.noteDensity[this.channel2Density] || 4;
+        
+        for (let barIndex = 0; barIndex < Math.min(2, this.progression.length); barIndex++) {
+            const bar = this.progression[barIndex];
+            previewNotes[barIndex] = [];
+            
+            const chordTones = this.getChordTonesForBar(bar);
+            if (!chordTones || chordTones.length === 0) continue;
+            
+            const voicedNotes = this.applyVoicingTemplate(chordTones, preset.voicingTemplate);
+            const stepDuration = 1.0 / notesPerBar;
+            
+            for (let i = 0; i < notesPerBar; i++) {
+                const noteIndex = i % voicedNotes.length;
+                const midi = voicedNotes[noteIndex];
+                const timingOffset = preset.timingOffsets && preset.timingOffsets[i % preset.timingOffsets.length] || 0;
+                const velocity = preset.velocityProfile && preset.velocityProfile[i % preset.velocityProfile.length] || 80;
+                
+                previewNotes[barIndex].push({
+                    midi: midi,
+                    start: (i * stepDuration) + timingOffset,
+                    duration: stepDuration * (preset.legato || 0.8),
+                    velocity: velocity
+                });
+            }
+        }
+        
+        // Play preview (don't update grid - keep original visible)
+        this.playPreviewLoop(previewNotes);
+    }
+    
+    generatePreviewNotes(numBars = 2) {
+        this.channel2Notes = {};
+        
+        if (!this.channel2CurrentPreset || !this.channel2CurrentPreset.voicingTemplate) {
+            return;
+        }
+        
+        const preset = this.channel2CurrentPreset;
+        const notesPerBar = preset.noteDensity[this.channel2Density] || 4;
+        
+        // Generate only first few bars for preview
+        for (let barIndex = 0; barIndex < Math.min(numBars, this.progression.length); barIndex++) {
+            const bar = this.progression[barIndex];
+            this.channel2Notes[barIndex] = [];
+            
+            const chordTones = this.getChordTonesForBar(bar);
+            if (!chordTones || chordTones.length === 0) continue;
+            
+            const voicedNotes = this.applyVoicingTemplate(chordTones, preset.voicingTemplate);
+            const stepDuration = 1.0 / notesPerBar;
+            
+            for (let i = 0; i < notesPerBar; i++) {
+                const noteIndex = i % voicedNotes.length;
+                const midi = voicedNotes[noteIndex];
+                const timingOffset = preset.timingOffsets && preset.timingOffsets[i % preset.timingOffsets.length] || 0;
+                const velocity = preset.velocityProfile && preset.velocityProfile[i % preset.velocityProfile.length] || 80;
+                
+                this.channel2Notes[barIndex].push({
+                    midi: midi,
+                    start: (i * stepDuration) + timingOffset,
+                    duration: stepDuration * (preset.legato || 0.8),
+                    velocity: velocity
+                });
+            }
+        }
+    }
+    
+    playPreviewLoop(previewNotes) {
+        if (!this.channel2Synth) return;
+        
+        // Stop any current preview
+        this.stopPreview();
+        
+        // Check if we should mute main Channel 2
+        const muteCheckbox = document.getElementById('muteMainDuringPreview');
+        if (muteCheckbox && muteCheckbox.checked) {
+            this.channel2PreviewActive = true;
+        }
+        
+        const barDuration = (60 / this.bpm) * 4; // 4 beats
+        const numBars = Object.keys(previewNotes).length;
+        if (numBars === 0) return;
+        
+        // Play loop
+        const playLoop = () => {
+            Object.keys(previewNotes).forEach(barIdx => {
+                const notes = previewNotes[barIdx];
+                const barOffset = parseInt(barIdx) * barDuration;
+                
+                notes.forEach(note => {
+                    const startTime = Tone.now() + barOffset + (note.start * barDuration);
+                    const duration = note.duration * barDuration;
+                    const freq = Tone.Frequency(note.midi, 'midi').toFrequency();
+                    
+                    this.channel2Synth.triggerAttackRelease(freq, duration, startTime, note.velocity / 127);
+                });
+            });
+            
+            // Schedule next loop
+            this.previewLoopTimeout = setTimeout(playLoop, numBars * barDuration * 1000);
+        };
+        
+        playLoop();
+    }
+    
+    stopPreview() {
+        if (this.previewLoopTimeout) {
+            clearTimeout(this.previewLoopTimeout);
+            this.previewLoopTimeout = null;
+        }
+        
+        // Unmute main Channel 2
+        this.channel2PreviewActive = false;
+    }
+    
+    applyModalPreset(applyAll = false) {
+        if (!this.selectedPresetForModal) {
+            this.showChannel2Status('⚠️ Please select a preset first', 'warning');
+            return;
+        }
+        
+        // Get settings from modal
+        this.channel2Source = document.getElementById('channel2ModalSource').value;
+        this.channel2Density = document.getElementById('channel2ModalDensity').value;
+        this.channel2OctaveRange = parseInt(document.getElementById('channel2ModalOctaves').value);
+        
+        // Apply preset permanently
+        this.channel2CurrentPreset = this.selectedPresetForModal;
+        
+        if (applyAll) {
+            // Generate for ALL patterns
+            console.log('🔄 Applying to ALL patterns...');
+            const currentPattern = this.currentPattern;
+            
+            // Apply to each pattern
+            Object.keys(this.patterns).forEach(patternId => {
+                // Switch to pattern
+                this.currentPattern = patternId;
+                const pattern = this.patterns[patternId];
+                if (pattern && pattern.progression) {
+                    this.progression = pattern.progression;
+                    
+                    // Generate for this pattern
+                    if (this.channel2CurrentPreset && this.channel2CurrentPreset.voicingTemplate) {
+                        this.generateFromPreset();
+                    } else {
+                        this.generateChannel2Pattern();
+                    }
+                    
+                    // Save to pattern
+                    pattern.channel2Notes = JSON.parse(JSON.stringify(this.channel2Notes));
+                    pattern.channel2Settings = {
+                        source: this.channel2Source,
+                        style: this.channel2Style,
+                        pattern: this.channel2Pattern,
+                        density: this.channel2Density,
+                        octaveRange: this.channel2OctaveRange
+                    };
+                    
+                    console.log(`  ✅ Applied to ${patternId}: ${Object.keys(this.channel2Notes).length} bars`);
+                }
+            });
+            
+            // Restore original pattern (this will reload channel2Notes from the pattern)
+            const restorePattern = this.patterns[currentPattern];
+            if (restorePattern) {
+                this.progression = restorePattern.progression;
+                this.channel2Notes = restorePattern.channel2Notes || {};
+                this.currentPattern = currentPattern;
+            }
+            
+            // Update display and sync status
+            this.buildGrid();
+            this.updateChannel2Display();
+            this.updateChannel2SyncStatus();
+            
+            console.log(`✅ Applied preset to ALL patterns: ${this.selectedPresetForModal.humanName}`);
+        } else {
+            // Generate for current pattern only (8 bars)
+            if (this.channel2CurrentPreset && this.channel2CurrentPreset.voicingTemplate) {
+                this.generateFromPreset(8); // Limit to 8 bars
+            } else {
+                this.generateChannel2PatternLimited(8);
+            }
+            console.log(`✅ Applied preset to CURRENT pattern (8 bars): ${this.selectedPresetForModal.humanName}`);
+        }
+        
+        // Clear preview state
+        this.previewState = null;
+        
+        // Sync sidebar
+        document.querySelectorAll('input[name="channel2Source"]').forEach(radio => {
+            radio.checked = radio.value === this.channel2Source;
+        });
+        document.getElementById('channel2Density').value = this.channel2Density;
+        document.getElementById('channel2OctaveRange').value = this.channel2OctaveRange;
+        
+        // Update display
+        this.updateChannel2Display();
+        
+        // Close modal
+        this.closePresetMenu();
+    }
+    
+    generateChannel2PatternLimited(maxBars) {
+        this.channel2Notes = {};
+        
+        if (!this.channel2CurrentPreset || !this.channel2CurrentPreset.voicingTemplate) {
+            return;
+        }
+        
+        const preset = this.channel2CurrentPreset;
+        const notesPerBar = preset.noteDensity[this.channel2Density] || 4;
+        
+        for (let barIndex = 0; barIndex < Math.min(maxBars, this.progression.length); barIndex++) {
+            const bar = this.progression[barIndex];
+            this.channel2Notes[barIndex] = [];
+            
+            const chordTones = this.getChordTonesForBar(bar);
+            if (!chordTones || chordTones.length === 0) continue;
+            
+            const voicedNotes = this.applyVoicingTemplate(chordTones, preset.voicingTemplate);
+            const stepDuration = 1.0 / notesPerBar;
+            
+            for (let i = 0; i < notesPerBar; i++) {
+                const noteIndex = i % voicedNotes.length;
+                const midi = voicedNotes[noteIndex];
+                const timingOffset = preset.timingOffsets && preset.timingOffsets[i % preset.timingOffsets.length] || 0;
+                const velocity = preset.velocityProfile && preset.velocityProfile[i % preset.velocityProfile.length] || 80;
+                
+                this.channel2Notes[barIndex].push({
+                    midi: midi,
+                    start: (i * stepDuration) + timingOffset,
+                    duration: stepDuration * (preset.legato || 0.8),
+                    velocity: velocity
+                });
+            }
+        }
+        
+        this.buildGrid();
+    }
+    
+    populatePresetMenu() {
+        const listContainer = document.getElementById('channel2PresetList');
+        if (!listContainer) return;
+        
+        listContainer.innerHTML = '';
+        
+        // Group presets by category
+        const categories = {};
+        this.channel2Presets.forEach(preset => {
+            if (!categories[preset.category]) {
+                categories[preset.category] = [];
+            }
+            categories[preset.category].push(preset);
+        });
+        
+        // Render each category
+        Object.keys(categories).sort().forEach(category => {
+            const categoryDiv = document.createElement('div');
+            categoryDiv.style.marginBottom = '1rem';
+            
+            // Category header
+            const header = document.createElement('div');
+            header.style.cssText = 'font-weight: bold; color: #00d4ff; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.9rem;';
+            header.textContent = category.replace(/_/g, ' ');
+            categoryDiv.appendChild(header);
+            
+            // Presets in category
+            categories[category].forEach(preset => {
+                const presetItem = document.createElement('div');
+                presetItem.style.cssText = 'background: #0a0a0a; padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 4px; cursor: pointer; border: 2px solid transparent; transition: all 0.2s;';
+                presetItem.dataset.presetId = preset.id;
+                
+                // Check if active
+                if (this.channel2CurrentPreset && this.channel2CurrentPreset.id === preset.id) {
+                    presetItem.style.borderColor = '#00d4ff';
+                    presetItem.style.background = '#1a2a3a';
+                }
+                
+                // Preset name
+                const name = document.createElement('div');
+                name.style.cssText = 'font-weight: bold; margin-bottom: 0.25rem;';
+                name.textContent = preset.humanName + (this.channel2CurrentPreset?.id === preset.id ? ' ✓' : '');
+                presetItem.appendChild(name);
+                
+                // Preset description
+                const desc = document.createElement('div');
+                desc.style.cssText = 'font-size: 0.85rem; color: #888;';
+                desc.textContent = preset.description;
+                presetItem.appendChild(desc);
+                
+                // Tags
+                const tags = document.createElement('div');
+                tags.style.cssText = 'font-size: 0.75rem; color: #666; margin-top: 0.25rem;';
+                tags.textContent = preset.feelTags.join(' • ');
+                presetItem.appendChild(tags);
+                
+                // Click handler
+                presetItem.addEventListener('click', () => {
+                    this.applyChannel2Preset(preset.id);
+                    this.closePresetMenu();
+                });
+                
+                // Hover effect
+                presetItem.addEventListener('mouseenter', () => {
+                    if (this.channel2CurrentPreset?.id !== preset.id) {
+                        presetItem.style.borderColor = '#00d4ff';
+                    }
+                });
+                
+                presetItem.addEventListener('mouseleave', () => {
+                    if (this.channel2CurrentPreset?.id !== preset.id) {
+                        presetItem.style.borderColor = 'transparent';
+                    }
+                });
+                
+                categoryDiv.appendChild(presetItem);
+            });
+            
+            listContainer.appendChild(categoryDiv);
+        });
+    }
+    
+    filterPresets(query) {
+        const items = document.querySelectorAll('#channel2PresetList [data-preset-id]');
+        const lowerQuery = query.toLowerCase();
+        
+        items.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(lowerQuery) ? 'block' : 'none';
+        });
+    }
+    
+    selectRandomPreset() {
+        if (this.channel2Presets.length === 0) return;
+        
+        const randomIndex = Math.floor(Math.random() * this.channel2Presets.length);
+        const randomPreset = this.channel2Presets[randomIndex];
+        
+        this.applyChannel2Preset(randomPreset.id);
+        this.showChannel2Status(`🎲 Random: ${randomPreset.humanName}`, 'success');
+    }
+    
+    updateChannel2Display() {
+        const displayEl = document.getElementById('channel2CurrentDisplay');
+        const detailsEl = document.getElementById('channel2CurrentDetails');
+        
+        if (displayEl) {
+            if (this.channel2CurrentPreset) {
+                displayEl.textContent = this.channel2CurrentPreset.humanName;
+            } else {
+                displayEl.textContent = `${this.channel2Style} • ${this.channel2Pattern}`;
+            }
+        }
+        
+        if (detailsEl) {
+            const densityLabels = {
+                'sparse': 'Sparse',
+                'medium': 'Medium',
+                'dense': 'Dense',
+                'verydense': 'Very Dense'
+            };
+            detailsEl.textContent = `${densityLabels[this.channel2Density]} density • ${this.channel2OctaveRange} Octave${this.channel2OctaveRange > 1 ? 's' : ''}`;
+        }
+    }
+    
+    updateStylesBySource() {
+        const styleSelect = document.getElementById('channel2Style');
+        if (!styleSelect) return;
+        
+        const chordStyles = [
+            { value: 'piano', label: '🎹 Piano' },
+            { value: 'strumming', label: '🎸 Guitar' },
+            { value: 'bass', label: '🎸 Bass' },
+            { value: 'arpeggio', label: '🎵 Arpeggio' },
+            { value: 'pads', label: '🎹 Pads' }
+        ];
+        
+        const midiStyles = [
+            { value: 'melody', label: '🎶 Melody' },
+            { value: 'staccato', label: '⚡ Staccato' },
+            { value: 'ostinato', label: '🔁 Ostinato' }
+        ];
+        
+        const styles = this.channel2Source === 'chords' ? chordStyles : midiStyles;
+        
+        styleSelect.innerHTML = '';
+        styles.forEach(style => {
+            const opt = document.createElement('option');
+            opt.value = style.value;
+            opt.textContent = style.label;
+            styleSelect.appendChild(opt);
+        });
+        
+        // Set first style as default
+        this.channel2Style = styles[0].value;
+        styleSelect.value = this.channel2Style;
+        
+        // Update patterns for new style
+        this.updateChannel2PatternOptions();
+    }
+    
     updateChannel2PatternOptions() {
         const patternSelect = document.getElementById('channel2Pattern');
-        const patternOptions = document.getElementById('patternOptions');
-        if (!patternSelect || !patternOptions) return;
+        if (!patternSelect) return;
         
         // Define available patterns per style
         const stylePatterns = {
@@ -1533,18 +2441,22 @@ class ChordProgressionApp {
         
         const patterns = stylePatterns[this.channel2Style] || [];
         
+        // Save current selection
+        const currentValue = patternSelect.value;
+        
+        // Clear and repopulate
+        patternSelect.innerHTML = '';
+        
         if (patterns.length === 0) {
-            // Hide pattern options
-            patternOptions.style.display = 'none';
+            // No patterns available for this style
+            const option = document.createElement('option');
+            option.value = 'default';
+            option.textContent = '(Auto)';
+            patternSelect.appendChild(option);
+            patternSelect.disabled = true;
+            this.channel2Pattern = 'default';
         } else {
-            // Show and populate pattern options
-            patternOptions.style.display = 'block';
-            
-            // Save current selection
-            const currentValue = patternSelect.value;
-            
-            // Clear and repopulate
-            patternSelect.innerHTML = '';
+            patternSelect.disabled = false;
             patterns.forEach(p => {
                 const option = document.createElement('option');
                 option.value = p.value;
@@ -1555,6 +2467,7 @@ class ChordProgressionApp {
             // Restore selection if still valid, otherwise use first option
             if (patterns.find(p => p.value === currentValue)) {
                 patternSelect.value = currentValue;
+                this.channel2Pattern = currentValue;
             } else {
                 patternSelect.value = patterns[0].value;
                 this.channel2Pattern = patterns[0].value;
@@ -1569,15 +2482,29 @@ class ChordProgressionApp {
             return;
         }
 
+        console.log('🎵 Generating Channel 2 pattern...');
+        console.log('- Preset:', this.channel2CurrentPreset?.humanName || 'None');
+        console.log('- Source:', this.channel2Source);
+        console.log('- Style:', this.channel2Style);
+        console.log('- Pattern:', this.channel2Pattern);
+        console.log('- Density:', this.channel2Density);
+        console.log('- Progression bars:', this.progression.length);
+
         // Generate pattern based on settings
         this.channel2Notes = {};
         
-        // Determine notes per bar based on density
+        // If preset is selected, use preset-based generation
+        if (this.channel2CurrentPreset && this.channel2CurrentPreset.voicingTemplate) {
+            this.generateFromPreset();
+            return;
+        }
+        
+        // Determine notes per bar based on density (updated ranges)
         const notesPerBar = {
-            'sparse': 2,
-            'medium': 4,
-            'dense': 8,
-            'verydense': 16
+            'sparse': 3,      // 2-4 notes/bar
+            'medium': 6,      // 4-8 notes/bar
+            'dense': 12,      // 8-16 notes/bar
+            'verydense': 24   // 16-32 notes/bar
         }[this.channel2Density];
         
         this.progression.forEach((bar, barIndex) => {
@@ -1853,6 +2780,115 @@ class ChordProgressionApp {
         this.updateChannel2SyncStatus();
     }
 
+    generateFromPreset(maxBars = null) {
+        const preset = this.channel2CurrentPreset;
+        const notesPerBar = preset.noteDensity[this.channel2Density] || 4;
+        
+        console.log(`🎹 generateFromPreset called:`);
+        console.log(`  - maxBars: ${maxBars}`);
+        console.log(`  - progression.length: ${this.progression.length}`);
+        console.log(`  - preset: ${preset.humanName}`);
+        console.log(`  - voicing: [${preset.voicingTemplate.join(', ')}]`);
+        
+        const barsToGenerate = maxBars ? Math.min(maxBars, this.progression.length) : this.progression.length;
+        console.log(`  - Will generate: ${barsToGenerate} bars`);
+        
+        for (let barIndex = 0; barIndex < barsToGenerate; barIndex++) {
+            const bar = this.progression[barIndex];
+            this.channel2Notes[barIndex] = [];
+            
+            // Get chord tones from the bar
+            const chordTones = this.getChordTonesForBar(bar);
+            if (!chordTones || chordTones.length === 0) return;
+            
+            // Apply voicing template to create notes
+            const voicedNotes = this.applyVoicingTemplate(chordTones, preset.voicingTemplate);
+            
+            // Generate rhythm based on preset
+            const stepDuration = 1.0 / notesPerBar;
+            
+            for (let i = 0; i < notesPerBar; i++) {
+                const noteIndex = i % voicedNotes.length;
+                const midi = voicedNotes[noteIndex];
+                
+                // Apply timing offset from preset
+                const timingOffset = preset.timingOffsets && preset.timingOffsets[i % preset.timingOffsets.length] || 0;
+                
+                // Apply velocity from preset
+                const velocity = preset.velocityProfile && preset.velocityProfile[i % preset.velocityProfile.length] || 80;
+                
+                this.channel2Notes[barIndex].push({
+                    midi: midi,
+                    start: (i * stepDuration) + timingOffset,
+                    duration: stepDuration * (preset.legato || 0.8),
+                    velocity: velocity
+                });
+            }
+        }
+        
+        const totalNotes = Object.values(this.channel2Notes).reduce((sum, notes) => sum + notes.length, 0);
+        console.log(`✅ Generated ${totalNotes} notes from preset "${preset.humanName}"`);
+        
+        this.buildGrid();
+    }
+    
+    getChordTonesForBar(bar) {
+        // Extract MIDI notes from the bar's chords
+        const midiNotes = [];
+        bar.chords.forEach(chord => {
+            if (chord && chord.midiNotes) {
+                midiNotes.push(...chord.midiNotes);
+            }
+        });
+        
+        if (midiNotes.length === 0) return null;
+        
+        // Get unique pitch classes
+        const pitchClasses = [...new Set(midiNotes.map(m => m % 12))];
+        
+        // Find base octave
+        const avgMidi = midiNotes.reduce((a, b) => a + b, 0) / midiNotes.length;
+        const baseOctave = Math.floor(avgMidi / 12);
+        
+        return { pitchClasses, baseOctave, midiNotes };
+    }
+    
+    applyVoicingTemplate(chordTones, template) {
+        const { midiNotes } = chordTones;
+        
+        // Sort MIDI notes - these are the ACTUAL notes from the piano roll
+        const sortedMidi = [...midiNotes].sort((a, b) => a - b);
+        
+        // If we have fewer notes than the template wants, just cycle through what we have
+        // Example: 2 notes [C, E] with template [root, third, fifth, octave] 
+        // → Use [C, E, C, E] instead of forcing non-existent notes
+        const notes = [];
+        
+        template.forEach((voicing, index) => {
+            // Simply cycle through available notes
+            const noteIndex = index % sortedMidi.length;
+            let midiNote = sortedMidi[noteIndex];
+            
+            // Handle octave modifiers
+            let octaveOffset = 0;
+            if (voicing.endsWith('_low')) {
+                octaveOffset = -1;
+            } else if (voicing.endsWith('_high')) {
+                octaveOffset = 1;
+            }
+            
+            // Special case: octave always adds 12
+            if (voicing === 'octave') {
+                midiNote = sortedMidi[0] + 12;
+            }
+            
+            // Apply octave offset
+            notes.push(midiNote + (octaveOffset * 12));
+        });
+        
+        return notes;
+    }
+    
     clearChannel2Pattern() {
         this.channel2Notes = {};
         this.progressionAnalysis = null;
@@ -2071,12 +3107,12 @@ class ChordProgressionApp {
                 maxMidi = 108; // C8
                 actualNumNotes = maxMidi - minMidi + 1;
             } else {
-                // Auto: smart range based on actual notes
+                // Auto: smart range based on actual notes (including Channel 2)
                 minMidi = 127;
                 maxMidi = 0;
                 let hasNotes = false;
                 
-                this.progression.forEach(bar => {
+                this.progression.forEach((bar, barIdx) => {
                     bar.chords.forEach(chord => {
                         if (chord && chord.midiNotes) {
                             hasNotes = true;
@@ -2086,6 +3122,17 @@ class ChordProgressionApp {
                             });
                         }
                     });
+                    
+                    // Also check Channel 2 notes for range calculation
+                    if (this.showChannel2 && this.channel2Notes[barIdx]) {
+                        this.channel2Notes[barIdx].forEach(note => {
+                            if (note && note.midi) {
+                                hasNotes = true;
+                                minMidi = Math.min(minMidi, note.midi);
+                                maxMidi = Math.max(maxMidi, note.midi);
+                            }
+                        });
+                    }
                 });
                 
                 if (!hasNotes) {
@@ -4254,45 +5301,69 @@ class ChordProgressionApp {
             // Determine which Channel 2 notes to export
             let notesToExport = {};
             if (allPatterns) {
-                // Export all patterns' Channel 2 notes
-                Object.keys(this.patterns).forEach(patternId => {
-                    const pattern = this.patterns[patternId];
-                    if (pattern && pattern.channel2Notes) {
-                        Object.keys(pattern.channel2Notes).forEach(barIdx => {
-                            const globalBarIdx = Object.keys(notesToExport).length;
-                            notesToExport[globalBarIdx] = pattern.channel2Notes[barIdx];
-                        });
-                    }
-                });
-            } else {
-                // Export current pattern only
+                // Export ALL bars from current channel2Notes (entire progression)
                 notesToExport = this.channel2Notes;
+            } else {
+                // Export current pattern only (8 bars)
+                const barsPerPattern = 8;
+                notesToExport = {};
+                for (let i = 0; i < barsPerPattern; i++) {
+                    if (this.channel2Notes[i]) {
+                        notesToExport[i] = this.channel2Notes[i];
+                    }
+                }
+                
+                console.log('Current pattern:', this.currentPattern);
+                console.log('Exporting bars:', Object.keys(notesToExport).length);
             }
             
-            // Add Channel 2 notes
-            let currentTick = 0;
+            // Collect all events with absolute time
+            const allEvents = [];
+            
+            console.log('📊 Channel 2 MIDI Export Debug:');
+            console.log('Bars to export:', Object.keys(notesToExport).length);
+            
             Object.keys(notesToExport).sort((a, b) => parseInt(a) - parseInt(b)).forEach(barIdx => {
                 const notes = notesToExport[barIdx];
                 if (notes && notes.length > 0) {
-                    notes.forEach(note => {
+                    console.log(`Bar ${barIdx}: ${notes.length} notes`);
+                    notes.forEach((note, idx) => {
                         // Calculate absolute tick position
                         const barStartTick = parseInt(barIdx) * beatsPerBar * ticksPerBeat;
                         const noteStartTick = barStartTick + Math.round(note.start * beatsPerBar * ticksPerBeat);
-                        const noteEndTick = noteStartTick + Math.round(note.duration * beatsPerBar * ticksPerBeat);
+                        const noteDurationTicks = Math.round(note.duration * beatsPerBar * ticksPerBeat);
                         
-                        // Note ON
-                        const deltaStart = noteStartTick - currentTick;
-                        const deltaStartBytes = this.encodeVariableLength(deltaStart);
-                        events.push(...deltaStartBytes, 0x90, note.midi, 0x60);
-                        currentTick = noteStartTick;
+                        if (idx === 0) {
+                            console.log(`  First note: start=${note.start.toFixed(3)}, duration=${note.duration.toFixed(3)}, tick=${noteStartTick}`);
+                        }
                         
-                        // Note OFF
-                        const deltaEnd = noteEndTick - currentTick;
-                        const deltaEndBytes = this.encodeVariableLength(deltaEnd);
-                        events.push(...deltaEndBytes, 0x80, note.midi, 0x00);
-                        currentTick = noteEndTick;
+                        // Add Note ON event
+                        allEvents.push({ tick: noteStartTick, type: 'on', midi: note.midi });
+                        
+                        // Add Note OFF event
+                        allEvents.push({ tick: noteStartTick + noteDurationTicks, type: 'off', midi: note.midi });
                     });
                 }
+            });
+            
+            console.log('Total events:', allEvents.length);
+            
+            // Sort all events by tick
+            allEvents.sort((a, b) => a.tick - b.tick);
+            
+            // Convert to MIDI events with delta times
+            let lastTick = 0;
+            allEvents.forEach(event => {
+                const delta = event.tick - lastTick;
+                const deltaBytes = this.encodeVariableLength(delta);
+                
+                if (event.type === 'on') {
+                    events.push(...deltaBytes, 0x90, event.midi, 0x60);
+                } else {
+                    events.push(...deltaBytes, 0x80, event.midi, 0x00);
+                }
+                
+                lastTick = event.tick;
             });
             
             // End of track
@@ -6226,6 +7297,9 @@ class ChordProgressionApp {
     }
     
     playChannel2Notes(barIndex, barDuration) {
+        // Don't play if preview is active and mute is enabled
+        if (this.channel2PreviewActive) return;
+        
         const notes = this.channel2Notes[barIndex];
         if (!notes || notes.length === 0) return;
         

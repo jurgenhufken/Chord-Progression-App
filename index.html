@@ -605,67 +605,146 @@
                         <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎼 Channel 2 Pattern Generator</summary>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                             <label>
-                                <input type="checkbox" id="channel2PatternEnabled" checked> Enable Pattern Generator
+                                <input type="checkbox" id="channel2PatternEnabled" checked> Enable
                             </label>
                             <span id="channel2SyncStatus" style="font-size: 0.85em; color: #888;">⚠️ Not synced</span>
                         </div>
                         
-                        <label>Source:
-                            <select id="channel2Source">
-                                <option value="chords" selected>Chord Analysis</option>
-                                <option value="midi">MIDI Notes</option>
-                            </select>
-                        </label>
+                        <!-- Preset Selector Button -->
+                        <button id="channel2PresetSelector" class="btn-primary" style="width: 100%; margin-bottom: 0.75rem; padding: 1rem; font-size: 1.1rem;">
+                            🎨 Browse Patterns ▼
+                        </button>
                         
-                        <label>Style:
-                            <select id="channel2Style">
-                                <option value="arpeggio" selected>🎵 Arpeggio (Sequential)</option>
-                                <option value="melody">🎶 Melody (Random)</option>
-                                <option value="ostinato">🔁 Ostinato (Repeating)</option>
-                                <option value="pads">🎹 Pads (Sustained)</option>
-                                <option value="bass">🎸 Bass Line</option>
-                                <option value="staccato">⚡ Staccato (Short)</option>
-                                <option value="strumming">🎸 Strumming (Guitar)</option>
-                                <option value="piano">🎹 Piano (Block Chords)</option>
-                            </select>
-                        </label>
+                        <!-- Current Selection Display -->
+                        <div style="background: #1a1a1a; padding: 0.75rem; border-radius: 4px; margin-bottom: 0.75rem;">
+                            <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.25rem;">Current:</div>
+                            <div id="channel2CurrentDisplay" style="font-weight: bold; color: #00d4ff; margin-bottom: 0.5rem;">Manual Mode</div>
+                            <div id="channel2CurrentDetails" style="font-size: 0.85rem; color: #888;">
+                                Click Browse to select a pattern
+                            </div>
+                        </div>
                         
-                        <div id="patternOptions" style="margin-top: 0.5rem;">
-                            <label>Pattern:
-                                <select id="channel2Pattern">
-                                    <option value="up" selected>↑ Up</option>
-                                    <option value="down">↓ Down</option>
-                                    <option value="updown">↕ Up-Down</option>
-                                    <option value="random">🎲 Random</option>
-                                    <option value="pendulum">⟲ Pendulum</option>
-                                </select>
+                        <!-- Settings -->
+                        <label style="font-weight: bold; color: #00d4ff; font-size: 0.9rem;">📊 SOURCE:</label>
+                        <div style="margin: 0.5rem 0 0.75rem 0;">
+                            <label style="display: block; margin-bottom: 0.25rem;">
+                                <input type="radio" name="channel2Source" value="chords" checked> Chord Analysis
+                            </label>
+                            <label style="display: block;">
+                                <input type="radio" name="channel2Source" value="midi"> MIDI Notes
                             </label>
                         </div>
                         
-                        <label>Density:
-                            <select id="channel2Density">
-                                <option value="sparse">Sparse (2 notes/bar)</option>
-                                <option value="medium" selected>Medium (4 notes/bar)</option>
-                                <option value="dense">Dense (8 notes/bar)</option>
-                                <option value="verydense">Very Dense (16 notes/bar)</option>
-                            </select>
-                        </label>
+                        <label style="font-weight: bold; color: #00d4ff; font-size: 0.9rem;">🎚️ DENSITY:</label>
+                        <select id="channel2Density" style="width: 100%; margin: 0.5rem 0 0.75rem 0;">
+                            <option value="sparse">Sparse (2-4 notes/bar)</option>
+                            <option value="medium" selected>Medium (4-8 notes/bar)</option>
+                            <option value="dense">Dense (8-16 notes/bar)</option>
+                            <option value="verydense">Very Dense (16-32 notes/bar)</option>
+                        </select>
                         
-                        <label>Octave Range:
-                            <select id="channel2OctaveRange">
-                                <option value="1" selected>1 Octave</option>
-                                <option value="2">2 Octaves</option>
-                                <option value="3">3 Octaves</option>
-                            </select>
-                        </label>
+                        <label style="font-weight: bold; color: #00d4ff; font-size: 0.9rem;">🎹 OCTAVE RANGE:</label>
+                        <select id="channel2OctaveRange" style="width: 100%; margin: 0.5rem 0 0.75rem 0;">
+                            <option value="1" selected>1 Octave</option>
+                            <option value="2">2 Octaves</option>
+                            <option value="3">3 Octaves</option>
+                        </select>
                         
-                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                            <button id="regenerateChannel2" class="btn-secondary" style="flex: 1;">🔄 Current</button>
-                            <button id="regenerateAllChannel2" class="btn-secondary" style="flex: 1;">🔄 All Patterns</button>
+                        <!-- Actions -->
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button id="regenerateChannel2" class="btn-secondary" style="flex: 1;">🔄 Generate</button>
+                            <button id="randomChannel2" class="btn-secondary" style="flex: 1;">🎲 Random</button>
                         </div>
-                        <button id="syncChannel2" class="btn-secondary" style="width: 100%; margin-top: 0.25rem;">🔗 Sync to Progression</button>
+                        <button id="regenerateAllChannel2" class="btn-secondary" style="width: 100%; margin-top: 0.25rem;">🔄 All Patterns</button>
+                        
+                        <div id="channel2StatusMessage" style="margin-top: 0.5rem; padding: 0.5rem; background: #1a1a1a; border-radius: 4px; font-size: 0.85rem; color: #888; min-height: 20px; display: none;">
+                            <!-- Status messages appear here -->
+                        </div>
                     </details>
                 </div>
+                
+                <!-- Channel 2 Preset Menu (Hidden by default) -->
+                <div id="channel2PresetMenu" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1a1a1a; border: 2px solid #00d4ff; border-radius: 8px; width: 80%; max-width: 900px; height: 80%; max-height: 700px; z-index: 10000; box-shadow: 0 8px 32px rgba(0,0,0,0.8); flex-direction: column;">
+                    <!-- Header -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem; border-bottom: 1px solid #333;">
+                        <h3 style="margin: 0; color: #00d4ff;">🎨 Pattern Browser</h3>
+                        <button id="closePresetMenu" style="background: none; border: none; color: #888; font-size: 1.5rem; cursor: pointer; padding: 0;">✕</button>
+                    </div>
+                    
+                    <!-- Main Content: Two Columns -->
+                    <div style="display: flex; flex: 1; overflow: hidden;">
+                        <!-- Left Column: Tree Navigation -->
+                        <div style="width: 250px; border-right: 1px solid #333; overflow-y: auto; padding: 1rem;">
+                            <!-- View Selector -->
+                            <select id="channel2TreeView" style="width: 100%; margin-bottom: 1rem; padding: 0.5rem; background: #0a0a0a; border: 1px solid #333; border-radius: 4px; color: white;">
+                                <option value="category">By Category</option>
+                                <option value="feel">By Feel/Style</option>
+                                <option value="density">By Density</option>
+                                <option value="era">By Era/Genre</option>
+                                <option value="flat">Flat List</option>
+                            </select>
+                            
+                            <!-- Search -->
+                            <input type="text" id="channel2PresetSearch" placeholder="🔍 Search..." style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; background: #0a0a0a; border: 1px solid #333; border-radius: 4px; color: white; font-size: 0.9rem;">
+                            
+                            <!-- Tree -->
+                            <div id="channel2TreeNav" style="font-size: 0.9rem;">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <!-- Right Column: Preset Cards -->
+                        <div style="flex: 1; overflow-y: auto; padding: 1rem;">
+                            <div id="channel2PresetList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem;">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Footer: Settings & Actions -->
+                    <div style="border-top: 1px solid #333; padding: 1rem; background: #0a0a0a;">
+                        <div style="font-weight: bold; color: #00d4ff; margin-bottom: 0.5rem;">⚙️ TWEAK SETTINGS:</div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                            <div>
+                                <label style="font-size: 0.85rem; color: #888;">Source:</label>
+                                <select id="channel2ModalSource" style="width: 100%; padding: 0.25rem; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: white; font-size: 0.9rem;">
+                                    <option value="chords">Chords</option>
+                                    <option value="midi">MIDI</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.85rem; color: #888;">Density:</label>
+                                <select id="channel2ModalDensity" style="width: 100%; padding: 0.25rem; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: white; font-size: 0.9rem;">
+                                    <option value="sparse">Sparse</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="dense">Dense</option>
+                                    <option value="verydense">Very Dense</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="font-size: 0.85rem; color: #888;">Octaves:</label>
+                                <select id="channel2ModalOctaves" style="width: 100%; padding: 0.25rem; background: #1a1a1a; border: 1px solid #333; border-radius: 4px; color: white; font-size: 0.9rem;">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-top: 0.5rem; padding: 0.5rem; background: #1a1a1a; border-radius: 4px;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+                                <input type="checkbox" id="muteMainDuringPreview" checked style="cursor: pointer;">
+                                <span>🔇 Mute main Channel 2 during preview</span>
+                            </label>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button id="applyPresetCurrentBtn" class="btn-primary" style="flex: 1;">Apply Current (8 bars)</button>
+                            <button id="applyPresetAllBtn" class="btn-primary" style="flex: 1;">Apply All (16 bars)</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Overlay -->
+                <div id="channel2PresetOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999;"></div>
 
                 <div class="section">
                     <details open>

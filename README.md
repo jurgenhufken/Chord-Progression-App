@@ -1,12 +1,19 @@
-# 🎹 Chord Progression Studio v1.0.1
+# 🎶 Chord Progression App
 
-A professional DAW-style chord progression and music production application with advanced pattern sequencing, drum programming, and mixing capabilities.
+This project started as a personal hobby tool: I'm a musician who often hears songs or chord progressions in my head, usually at the wrong time — at work, on the train, in daily life. Opening a full DAW (Ableton, Logic, Cubase…) just to sketch an idea is slow and kills the flow.
+
+So I built this app as a **musical sketchpad**: a lightweight way to type chords, instantly hear them, experiment a little, and later bring the idea into a DAW.
+
+**It's not a replacement for a DAW.**  
+It's the step *before* the DAW: a place to capture the spark before it fades.
 
 ![Version](https://img.shields.io/badge/version-1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-production-success)
 
-## ✨ Features
+---
+
+## ✨ Current Features
 
 ### 🎼 Pattern System
 - **16 Patterns** organized in 4x4 matrix (A1-D4)
@@ -17,15 +24,12 @@ A professional DAW-style chord progression and music production application with
 - Centralized bar numbering system
 
 ### 🎹 Chord Progression Engine
-- Advanced chord parser supporting:
-  - Major, minor, sus2, sus4
-  - 7th, maj7, m7, dim7
-  - Diminished, augmented
-  - Add9, add11, 6th chords
-- Piano roll visualization with MIDI notes
-- Copy/paste functionality
-- Multiple chords per bar (sub-chords)
-- Default 32-bar progression included
+- **Type chords in text form** (`|Am|F|C|G|`) and play them instantly
+- **Advanced chord parser** supporting 40+ chord types
+- **Piano roll visualization** with MIDI notes
+- **Copy/paste functionality** for quick editing
+- **Multiple chords per bar** (sub-chords)
+- **Music theory analysis** (intervals, key detection, Roman numerals)
 
 ### 🥁 Drum Sequencer
 - **4 Tracks**: Kick, Snare, Hi-Hat, Clap
@@ -44,47 +48,132 @@ A professional DAW-style chord progression and music production application with
 - Real-time meter animation
 - Toggleable section at bottom of screen
 
-### 🎵 Audio Engine
+### 🎵 Audio Engine & Effects
 - Powered by **Tone.js**
 - Polyphonic synthesis for chords
-- Individual drum sounds
-- Seamless pattern switching (no audio glitches)
+- **Filter** (Lowpass/Highpass/Bandpass with cutoff and resonance)
+- **Effects** (Delay and Reverb with wet/dry controls)
+- **Full ADSR Controls** (Attack, Decay, Sustain, Release)
+- **Arpeggiator** (Up, Down, Up-Down, Random patterns)
 - BPM control (60-200)
 - Volume control in dB
-- Arpeggiator support
 
-### 🌐 Optie 2: Met Lokale Server (Aanbevolen voor beste performance)
+### 🎨 Channel 2 Pattern Generator (NEW!)
+- **15+ professional presets** across 7 categories (Piano, Guitar, Bass, Synth, Melody, Pads, Percussive)
+- **Live audio preview** with looping
+- **Smart voicing** that uses actual chord tones from piano roll
+- **Apply to Current or All patterns** (8 or 16 bars)
+- **Optional mute** for main channel during preview
+- **Non-destructive preview** (piano roll stays intact)
+- **Density controls** (Sparse/Medium/Dense/Very Dense)
+- **Octave range** (1-3 octaves)
+
+### 💾 Export & Save
+- **Export to MIDI** for DAW integration
+- **Save/Load projects** as JSON
+- **Autosave** functionality
+- Shareable links (planned)
+
+---
+
+## 🎯 Why This Exists
+
+Musicians often need to:
+
+1. **Catch ideas quickly** → a phone recording is messy, but chords in context are clear
+2. **Experiment freely** → a DAW project feels heavy; this is a sandbox
+3. **Learn by playing** → beginners can see what arpeggiators or effects do without a big setup
+4. **Collaborate** → send a chord sketch to a friend and jam on it later
+
+This app helps in all those cases.
+
+---
+
+## 👥 Who It's For
+
+- **Hobby musicians** who want to sketch ideas on the go
+- **Songwriters** who hear progressions and want them stored in usable form
+- **Producers** who need a quick "lab" to test harmonic ideas without cluttering their DAW
+- **Composers** who sometimes get stuck and want quick variations or modulations
+- **Beginners** who want to see and hear piano rolls, effects and sequencing without the DAW learning curve
+
+---
+
+## 🚧 Status
+
+This is still a **work in progress** — I build it for fun and for my own songwriting workflow.
+
+- Code is intentionally simple (HTML, CSS, JS) so it can run anywhere
+- Features like shareable links, AI chord suggestions, and more sequencing options are on the roadmap
+- The Channel 2 preset system was recently added for quick arrangement ideas
+
+---
+
+## 💡 Vision & Roadmap
+
+The long-term idea is that this could grow into:
+
+### 🎓 Learning Tool
+- Interactive tutorials for chord theory
+- Visual explanations of what effects/arps/sequencers do
+- "Why does this progression work?" analysis
+
+### 🎹 Serious Sketchpad
+- AI-assisted chord suggestions and variations
+- Genre-specific preset packs (Jazz, EDM, Lo-fi, etc.)
+- Advanced MIDI editing (velocity curves, humanization)
+- Multi-track arrangement (drums, bass, melody)
+
+### 🔌 Integration
+- VST/AU plugin version that drives your DAW directly
+- Hardware MIDI controller support
+- Direct export to Ableton/Logic/FL Studio projects
+- Cloud sync and collaboration features
+
+### 🌐 Community
+- User-created preset sharing/marketplace
+- Collaborative jam sessions (real-time multi-user)
+- Song idea gallery and voting system
+
+---
+
+## 🚀 Recent Updates
+
+### Channel 2 Preset System (Latest)
+- **15+ professional patterns** across 7 categories
+- **Live audio preview** with looping
+- **Smart voicing** that uses actual chord tones (no forced 7ths)
+- **Apply to Current or All patterns** (8 or 16 bars)
+- **Optional mute** for main channel during preview
+- **Non-destructive preview** (piano roll stays intact)
+
+---
+
+## 🚀 Quick Start
+
+### Installation
+1. Clone or download this repository
+2. Open `index.html` in a modern web browser (or use a local server)
+3. Start creating chord progressions!
+
+### Local Server (Recommended)
 ```bash
-# Optie A: Python (als je Python hebt)
+# Python
 python -m http.server 8000
 
-# Optie B: Node.js (als je Node hebt)
+# Node.js
 npx serve .
 
-# Optie C: VS Code Live Server
-# Rechtermuisknop op index.html → "Open with Live Server"
+# VS Code
+# Right-click index.html → "Open with Live Server"
 ```
-Dan open: `http://localhost:8000`
 
-### 📦 Wat je NIET nodig hebt:
-- ❌ Geen npm install
-- ❌ Geen build process
-- ❌ Geen dependencies installeren
-- ❌ Geen configuratie
-- ✅ **Gewoon 3 bestanden en het werkt!**
-
-## ✨ Features (Version 3.0)
-
-### 🎹 Core Functionality
-- **Flexible Grid Layout**: Handle any number of bars (not limited to 8)
-- **Excel-like Interface**: Unified grid with perfect alignment
-- **Piano Roll**: Visual MIDI note display directly under chord grid
-- **Vertical Ruler**: Bar numbers for easy navigation and paste targets
-- **Real-time Playback**: Continuous note playback with smooth playhead
-- **Loop Range**: Visual loop slider with adjustable start/end points
-- **Edit Mode**: Click, drag, box-select, copy/paste notes
-- **Context Menu**: Right-click for Cut, Copy, Paste, Delete
-- **Undo/Redo**: Full undo/redo support (Ctrl+Z/Ctrl+Y)
+### Usage
+1. **Enter chords**: Type `|Am|F|C|G|` in the input field
+2. **Parse**: Click "Parse" button
+3. **Play**: Press the play button or spacebar
+4. **Browse Patterns**: Click "🎨 Browse Patterns" to explore presets
+5. **Export**: Click "Export MIDI" to save for your DAW
 
 ### 💾 File Management
 - **Save/Load Projects**: Save as JSON, load anytime
@@ -155,23 +244,14 @@ Supports all common chord types:
 |Am F|C G|Dm7 G7|Cmaj7|
 ```
 
-## 🛠️ Technical Details
+## 🛠️ Tech Stack
 
-### Technologies
-- **Tone.js**: Web Audio API synthesis
-- **Pure JavaScript**: No frameworks, maximum performance
-- **CSS Grid**: Modern, responsive layout
-- **requestAnimationFrame**: Smooth 60fps animations
-
-### Architecture
-```
-app.js              # Main application logic
-├── ChordParser     # Parse chord notation
-├── Synthesizer     # Audio synthesis (Tone.js)
-├── Grid Builder    # Dynamic grid generation
-├── Playhead        # Smooth animation engine
-└── MIDI Export     # MIDI file generation
-```
+- **Vanilla JavaScript** (no frameworks, runs anywhere)
+- **Tone.js** for audio synthesis and effects
+- **HTML5 Canvas** for piano roll visualization
+- **LocalStorage** for autosave
+- **MIDI.js** for MIDI file export
+- **CSS Grid** for responsive layout
 
 ### Browser Support
 - ✅ Chrome/Edge (recommended)
@@ -252,27 +332,31 @@ npx serve .
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+This is a personal hobby project, but contributions are welcome! If you have ideas for:
+- New presets or patterns
+- UI/UX improvements
+- Bug fixes or optimizations
+- Feature suggestions
+
+Feel free to open an issue or pull request.
 
 ## 📄 License
 
-MIT License - feel free to use this project for any purpose.
+MIT License - feel free to fork, modify, and use for your own projects!
 
-## 🎵 Use Cases
+## 💬 Feedback
 
-- **Songwriting**: Quickly sketch chord progressions
-- **Music Production**: Export to DAW for full production
-- **Practice**: Learn and practice chord progressions
-- **Teaching**: Demonstrate chord theory
-- **AI Integration**: Perfect for AI-assisted composition
+If you use this tool and find it helpful (or have suggestions), I'd love to hear about it! This started as a personal need, but I hope it can be useful to others as well.
 
 ## 🙏 Acknowledgments
 
 Built with:
 - [Tone.js](https://tonejs.github.io/) - Web Audio framework
-- Modern web standards (ES6+, CSS Grid)
+- Modern web standards (ES6+, CSS Grid, Canvas API)
 
 ---
+
+*For now, it's just a hobby project — but one I hope can be useful to others as well.* 🎵
 
 **Made for musicians, by musicians** 🎹
 
