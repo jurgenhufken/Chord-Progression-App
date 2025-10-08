@@ -30,6 +30,13 @@
     .channel2-note {
         background-color: #ff6b35 !important;
         border: 1px solid #ff8c5c !important;
+        transition: all 0.1s ease;
+    }
+    .channel2-note.playing {
+        background-color: #ffaa00 !important;
+        border: 2px solid #ffcc00 !important;
+        box-shadow: 0 0 10px #ffaa00 !important;
+        transform: scale(1.05);
     }
     </style>
 </head>
@@ -80,48 +87,57 @@
             <!-- Left Sidebar -->
             <aside class="sidebar">
                 <div class="section">
-                    <label for="chordInput">Chord Progression:</label>
-                    <textarea id="chordInput" placeholder="e.g., | Am | F | C | G |"></textarea>
-                    <button id="parseBtn" class="btn-primary">Parse</button>
-                    <button id="parseWithBeats" class="btn-primary">🎲 Parse + Beats</button>
-                    
-                    <!-- Preset Buttons -->
-                    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                        <button class="btn-secondary" onclick="app.loadPreset('cm')">Cm Ballad (16 bars)</button>
-                        <button class="btn-secondary" onclick="app.loadPreset('am')">Am Classic (32 bars)</button>
-                    </div>
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">📝 Chord Progression</summary>
+                        <label for="chordInput">Chord Progression:</label>
+                        <textarea id="chordInput" placeholder="e.g., | Am | F | C | G |"></textarea>
+                        <button id="parseBtn" class="btn-primary">Parse</button>
+                        <button id="parseWithBeats" class="btn-primary">🎲 Parse + Beats</button>
+                        
+                        <!-- Preset Buttons -->
+                        <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <button class="btn-secondary" onclick="app.loadPreset('cm')">Cm Ballad (16 bars)</button>
+                            <button class="btn-secondary" onclick="app.loadPreset('am')">Am Classic (32 bars)</button>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>View</h3>
-                    <button id="togglePianoRoll" class="btn-secondary">👁️ Piano Roll</button>
-                    <button id="toggleChannel2" class="btn-secondary">🎶 Channel 2</button>
-                    <button id="toggleChannel2Mode" class="btn-secondary" style="display: none;">📊 Separate</button>
-                    <button id="toggleEditMode" class="btn-secondary">✏️ Edit</button>
-                    <label>Range: 
-                        <select id="pianoRange">
-                            <option value="auto" selected>Auto (Smart)</option>
-                            <option value="full">Full (C0-C8)</option>
-                        </select>
-                    </label>
-                    <label style="margin-top: 0.5rem;">
-                        <input type="checkbox" id="followPlayhead"> 🎯 Follow Playhead
-                    </label>
-                        <input type="checkbox" id="linkScroll" checked> 🔗 Link Scroll
-                    </label>
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">👁️ View</summary>
+                        <button id="togglePianoRoll" class="btn-secondary">👁️ Piano Roll</button>
+                        <button id="toggleChannel2" class="btn-secondary">🎶 Channel 2</button>
+                        <button id="toggleChannel2Mode" class="btn-secondary" style="display: none;">📊 Separate</button>
+                        <button id="toggleEditMode" class="btn-secondary">✏️ Edit</button>
+                        <label>Range: 
+                            <select id="pianoRange">
+                                <option value="auto" selected>Auto (Smart)</option>
+                                <option value="full">Full (C0-C8)</option>
+                            </select>
+                        </label>
+                        <label style="margin-top: 0.5rem;">
+                            <input type="checkbox" id="followPlayhead"> 🎯 Follow Playhead
+                        </label>
+                        <label>
+                            <input type="checkbox" id="linkScroll" checked> 🔗 Link Scroll
+                        </label>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <button id="copyBar" class="btn-secondary">Copy Bar</button>
-                    <button id="pasteBar" class="btn-secondary">Paste Bar</button>
-                    <button id="fillRange" class="btn-secondary">Fill Range</button>
-                    <button id="autoFillAll" class="btn-secondary">Auto-Fill All</button>
-                    <button id="exportDrumMidi" class="btn-secondary">💾 Export Drums MIDI</button>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🛠️ Tools</summary>
+                        <button id="copyBar" class="btn-secondary">Copy Bar</button>
+                        <button id="pasteBar" class="btn-secondary">Paste Bar</button>
+                        <button id="fillRange" class="btn-secondary">Fill Range</button>
+                        <button id="autoFillAll" class="btn-secondary">Auto-Fill All</button>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Pattern Mode</h3>
-                    <button id="toggleSongMode" class="btn-secondary">🎵 Song Mode</button>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎵 Pattern Mode</summary>
+                        <button id="toggleSongMode" class="btn-secondary">🎵 Song Mode</button>
 {{ ... }}
                     <label style="margin-top: 0.5rem;">
                         <input type="checkbox" id="chainPatterns" checked> 🔗 Chain Patterns
@@ -135,14 +151,16 @@
                     <div id="patternMatrix" class="pattern-matrix">
                         <!-- 4x4 pattern grid will be generated here -->
                     </div>
-                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #888;">
-                        Current: <span id="currentPatternLabel">A1</span>
-                    </div>
+                        <div style="margin-top: 0.5rem; font-size: 0.85rem; color: #888;">
+                            Current: <span id="currentPatternLabel">A1</span>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Chord Designer</h3>
-                    <div class="chord-designer">
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎹 Chord Designer</summary>
+                        <div class="chord-designer">
                         <!-- Chord Display -->
                         <div class="chord-display">
                             <label>Chord</label>
@@ -307,11 +325,13 @@
                         </div>
                         
                         <button id="applyChord" class="btn-primary" style="margin-top: 0.5rem; width: 100%;">Apply to Selected Bar</button>
-                    </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Interval Analysis</h3>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">📊 Interval Analysis</summary>
                     <div class="interval-analysis">
                         <div class="interval-display" id="intervalDisplay">
                             <div class="interval-type">-</div>
@@ -320,11 +340,13 @@
                         <div class="melodic-info" id="melodicInfo">
                             Select notes to see interval analysis
                         </div>
-                    </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>🎛️ Modulation</h3>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎛️ Modulation</summary>
                     <div class="modulation-widget" id="modulationWidget">
                         <div class="mod-status">
                             <div class="mod-lfo-info">
@@ -346,16 +368,20 @@
                             <span id="modActiveCount">0 active</span>
                             <button class="mod-settings-btn" id="openModMatrix" title="Open Modulation Matrix">⚙️</button>
                         </div>
-                    </div>
+                        </div>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Bars</h3>
-                    <button id="addBar" class="btn-secondary">➕ Add Bar</button>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">📏 Bars</summary>
+                        <button id="addBar" class="btn-secondary">➕ Add Bar</button>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Transpose</h3>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎼 Transpose</summary>
                     <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                         <button id="transposeDown12" class="btn-secondary" title="Down 1 octave">-12</button>
                         <button id="transposeDown1" class="btn-secondary" title="Down 1 semitone">-1</button>
@@ -363,48 +389,13 @@
                         <button id="transposeUp12" class="btn-secondary" title="Up 1 octave">+12</button>
                     </div>
                     <small style="color: #888;">Selected notes or all if none selected</small>
+                    </details>
                 </div>
 
+                <!-- ========== CHANNEL 1 (CHORDS) ========== -->
                 <div class="section">
-                    <h3>Arpeggiator</h3>
-                    <label>
-                        <input type="checkbox" id="arpEnabled"> Enable Arp
-                    </label>
-                    <label>
-                        <input type="checkbox" id="arpVisualizer" checked> Visualizer
-                    </label>
-                    <label>Pattern:
-                        <select id="arpPattern">
-                            <option value="up">Up</option>
-                            <option value="down">Down</option>
-                            <option value="updown">Up-Down</option>
-                            <option value="random">Random</option>
-                        </select>
-                    </label>
-                    <label>Speed:
-                        <select id="arpSpeed">
-                            <option value="1/16">1/16</option>
-                            <option value="1/8" selected>1/8</option>
-                            <option value="1/4">1/4</option>
-                        </select>
-                    </label>
-                    <label>Octaves: <input type="number" id="arpOctaves" min="1" max="3" value="1" style="width: 50px;"></label>
-                    <label>Trigger:
-                        <select id="arpTrigger">
-                            <option value="retrigger">Retrigger</option>
-                            <option value="legato">Legato</option>
-                        </select>
-                    </label>
-                    <label>Mode:
-                        <select id="arpMode">
-                            <option value="chord">Per Chord</option>
-                            <option value="run" selected>Run (Continuous)</option>
-                        </select>
-                    </label>
-                </div>
-
-                <div class="section">
-                    <h3>🎹 Synth Designer</h3>
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎹 Channel 1 - Chords</summary>
                     
                     <!-- Presets -->
                     <div class="synth-presets" style="display: flex; gap: 0.25rem; margin-bottom: 0.75rem;">
@@ -454,40 +445,261 @@
                     <label style="margin-top: 0.5rem;">
                         <input type="checkbox" id="notePreview" checked> Note Preview
                     </label>
+                    
+                    <!-- Arpeggiator -->
+                    <details style="margin-top: 0.75rem;">
+                        <summary style="cursor: pointer; color: #00d4ff; font-weight: bold;">🎵 Arpeggiator</summary>
+                        <div style="padding-left: 0.5rem; margin-top: 0.5rem;">
+                            <label>
+                                <input type="checkbox" id="arpEnabled"> Enable Arp
+                            </label>
+                            <label>
+                                <input type="checkbox" id="arpVisualizer" checked> Visualizer
+                            </label>
+                            <label>Pattern:
+                                <select id="arpPattern">
+                                    <option value="up">Up</option>
+                                    <option value="down">Down</option>
+                                    <option value="updown">Up-Down</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </label>
+                            <label>Speed:
+                                <select id="arpSpeed">
+                                    <option value="1/16">1/16</option>
+                                    <option value="1/8" selected>1/8</option>
+                                    <option value="1/4">1/4</option>
+                                </select>
+                            </label>
+                            <label>Octaves: <input type="number" id="arpOctaves" min="1" max="3" value="1" style="width: 50px;"></label>
+                            <label>Trigger:
+                                <select id="arpTrigger">
+                                    <option value="retrigger">Retrigger</option>
+                                    <option value="legato">Legato</option>
+                                </select>
+                            </label>
+                            <label>Mode:
+                                <select id="arpMode">
+                                    <option value="chord">Per Chord</option>
+                                    <option value="run" selected>Run (Continuous)</option>
+                                </select>
+                            </label>
+                        </div>
+                    </details>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Filter</h3>
-                    <label>Cutoff: <input type="range" id="filterCutoff" min="20" max="20000" value="5000" step="10"></label>
-                    <small style="color: #888;">Lower = darker, Higher = brighter</small>
-                    <label>Resonance: <input type="range" id="filterResonance" min="0" max="30" value="1" step="0.1"></label>
-                    <small style="color: #888;">Higher = more emphasis at cutoff</small>
-                    <label>Type:
-                        <select id="filterType">
-                            <option value="lowpass" selected>Lowpass (Cut highs)</option>
-                            <option value="highpass">Highpass (Cut lows)</option>
-                            <option value="bandpass">Bandpass (Cut both)</option>
-                        </select>
-                    </label>
-                </div>
-
-                <div class="section">
-                    <h3>Effects</h3>
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎛️ Channel 1 Effects</summary>
+                    <details>
+                        <summary style="cursor: pointer; color: #00d4ff;">Filter</summary>
+                        <div style="padding-left: 0.5rem; margin-top: 0.5rem;">
+                            <label>Cutoff: <input type="range" id="filterCutoff" min="20" max="20000" value="5000" step="10"></label>
+                            <small style="color: #888;">Lower = darker, Higher = brighter</small>
+                            <label>Resonance: <input type="range" id="filterResonance" min="0" max="30" value="1" step="0.1"></label>
+                            <small style="color: #888;">Higher = more emphasis at cutoff</small>
+                            <label>Type:
+                                <select id="filterType">
+                                    <option value="lowpass" selected>Lowpass (Cut highs)</option>
+                                    <option value="highpass">Highpass (Cut lows)</option>
+                                    <option value="bandpass">Bandpass (Cut both)</option>
+                                </select>
+                            </label>
+                        </div>
+                    </details>
                     <label>Delay: <input type="range" id="delayTime" min="0" max="1" value="0" step="0.01"></label>
                     <label>Feedback: <input type="range" id="delayFeedback" min="0" max="0.9" value="0" step="0.01"></label>
                     <label>Reverb: <input type="range" id="reverbWet" min="0" max="1" value="0" step="0.01"></label>
+                    </details>
+                </div>
+
+                <!-- ========== CHANNEL 2 (MELODY) ========== -->
+                <div class="section">
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎶 Channel 2 - Melody</summary>
+                    
+                    <label>Waveform:
+                        <select id="channel2Waveform">
+                            <option value="sine">Sine (Pure)</option>
+                            <option value="triangle">Triangle (Soft)</option>
+                            <option value="square">Square (Hollow)</option>
+                            <option value="sawtooth" selected>Sawtooth (Rich)</option>
+                        </select>
+                    </label>
+                    
+                    <details style="margin-top: 0.5rem;">
+                        <summary style="cursor: pointer; color: #ff6b35;">Amp Envelope (ADSR)</summary>
+                        <div style="padding-left: 0.5rem; margin-top: 0.5rem;">
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Attack:</span>
+                                <input type="range" id="channel2Attack" min="0" max="2" step="0.01" value="0.02" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="channel2AttackValue" style="min-width: 50px; text-align: right; color: #ff6b35;">0.02s</span>
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Decay:</span>
+                                <input type="range" id="channel2Decay" min="0" max="2" step="0.01" value="0.3" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="channel2DecayValue" style="min-width: 50px; text-align: right; color: #ff6b35;">0.3s</span>
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Sustain:</span>
+                                <input type="range" id="channel2Sustain" min="0" max="1" step="0.01" value="0.4" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="channel2SustainValue" style="min-width: 50px; text-align: right; color: #ff6b35;">0.4</span>
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>Release:</span>
+                                <input type="range" id="channel2Release" min="0" max="5" step="0.01" value="0.8" style="flex: 1; margin: 0 0.5rem;">
+                                <span id="channel2ReleaseValue" style="min-width: 50px; text-align: right; color: #ff6b35;">0.8s</span>
+                            </label>
+                        </div>
+                    </details>
+                    
+                    <!-- Channel 2 Arpeggiator -->
+                    <details style="margin-top: 0.75rem;">
+                        <summary style="cursor: pointer; color: #ff6b35; font-weight: bold;">🎵 Arpeggiator</summary>
+                        <div style="padding-left: 0.5rem; margin-top: 0.5rem;">
+                            <label>
+                                <input type="checkbox" id="channel2ArpEnabled"> Enable Arp
+                            </label>
+                            <label>
+                                <input type="checkbox" id="channel2ArpReplace" checked> Replace Pattern (uncheck to layer)
+                            </label>
+                            <label>
+                                <input type="checkbox" id="channel2ArpVisualizer" checked> Visualizer
+                            </label>
+                            <label>Pattern:
+                                <select id="channel2ArpPattern">
+                                    <option value="up">Up</option>
+                                    <option value="down">Down</option>
+                                    <option value="updown">Up-Down</option>
+                                    <option value="random">Random</option>
+                                </select>
+                            </label>
+                            <label>Speed:
+                                <select id="channel2ArpSpeed">
+                                    <option value="1/16">1/16</option>
+                                    <option value="1/8" selected>1/8</option>
+                                    <option value="1/4">1/4</option>
+                                </select>
+                            </label>
+                            <label>Octaves: <input type="number" id="channel2ArpOctaves" min="1" max="3" value="1" style="width: 50px;"></label>
+                            <label>Trigger:
+                                <select id="channel2ArpTrigger">
+                                    <option value="retrigger">Retrigger</option>
+                                    <option value="legato">Legato</option>
+                                </select>
+                            </label>
+                            <label>Mode:
+                                <select id="channel2ArpMode">
+                                    <option value="chord">Per Chord</option>
+                                    <option value="run" selected>Run (Continuous)</option>
+                                </select>
+                            </label>
+                        </div>
+                    </details>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Loop Range</h3>
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎼 Channel 2 Pattern Generator</summary>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                            <label>
+                                <input type="checkbox" id="channel2PatternEnabled" checked> Enable Pattern Generator
+                            </label>
+                            <span id="channel2SyncStatus" style="font-size: 0.85em; color: #888;">⚠️ Not synced</span>
+                        </div>
+                        
+                        <label>Source:
+                            <select id="channel2Source">
+                                <option value="chords" selected>Chord Analysis</option>
+                                <option value="midi">MIDI Notes</option>
+                            </select>
+                        </label>
+                        
+                        <label>Style:
+                            <select id="channel2Style">
+                                <option value="arpeggio" selected>🎵 Arpeggio (Sequential)</option>
+                                <option value="melody">🎶 Melody (Random)</option>
+                                <option value="ostinato">🔁 Ostinato (Repeating)</option>
+                                <option value="pads">🎹 Pads (Sustained)</option>
+                                <option value="bass">🎸 Bass Line</option>
+                                <option value="staccato">⚡ Staccato (Short)</option>
+                                <option value="strumming">🎸 Strumming (Guitar)</option>
+                                <option value="piano">🎹 Piano (Block Chords)</option>
+                            </select>
+                        </label>
+                        
+                        <div id="patternOptions" style="margin-top: 0.5rem;">
+                            <label>Pattern:
+                                <select id="channel2Pattern">
+                                    <option value="up" selected>↑ Up</option>
+                                    <option value="down">↓ Down</option>
+                                    <option value="updown">↕ Up-Down</option>
+                                    <option value="random">🎲 Random</option>
+                                    <option value="pendulum">⟲ Pendulum</option>
+                                </select>
+                            </label>
+                        </div>
+                        
+                        <label>Density:
+                            <select id="channel2Density">
+                                <option value="sparse">Sparse (2 notes/bar)</option>
+                                <option value="medium" selected>Medium (4 notes/bar)</option>
+                                <option value="dense">Dense (8 notes/bar)</option>
+                                <option value="verydense">Very Dense (16 notes/bar)</option>
+                            </select>
+                        </label>
+                        
+                        <label>Octave Range:
+                            <select id="channel2OctaveRange">
+                                <option value="1" selected>1 Octave</option>
+                                <option value="2">2 Octaves</option>
+                                <option value="3">3 Octaves</option>
+                            </select>
+                        </label>
+                        
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                            <button id="regenerateChannel2" class="btn-secondary" style="flex: 1;">🔄 Current</button>
+                            <button id="regenerateAllChannel2" class="btn-secondary" style="flex: 1;">🔄 All Patterns</button>
+                        </div>
+                        <button id="syncChannel2" class="btn-secondary" style="width: 100%; margin-top: 0.25rem;">🔗 Sync to Progression</button>
+                    </details>
+                </div>
+
+                <div class="section">
+                    <details open>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎛️ Channel 2 Effects</summary>
+                    <label>Delay: <input type="range" id="channel2DelayTime" min="0" max="1" value="0" step="0.01"></label>
+                    <label>Feedback: <input type="range" id="channel2DelayFeedback" min="0" max="0.9" value="0" step="0.01"></label>
+                    <label>Reverb: <input type="range" id="channel2Reverb" min="0" max="1" value="0.2" step="0.01"></label>
+                    </details>
+                </div>
+
+                <div class="section">
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🔁 Loop Range</summary>
                     <label>Start: <input type="number" id="loopStart" min="1" value="1" style="width: 50px;"></label>
                     <label>End: <input type="number" id="loopEnd" min="1" value="4" style="width: 50px;"></label>
                     <small style="color: #888;">Loop from bar X to bar Y</small>
+                    </details>
                 </div>
 
                 <div class="section">
-                    <h3>Export</h3>
-                    <button id="exportMidi" class="btn-secondary">Export MIDI</button>
+                    <details>
+                        <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">💾 Export MIDI</summary>
+                        <h4 style="margin-top: 0.5rem; color: #00d4ff;">Channel 1 (Chords)</h4>
+                        <button id="exportMidiCurrent" class="btn-secondary">📄 Current Pattern</button>
+                        <button id="exportMidiAll" class="btn-secondary">📚 All Patterns</button>
+                        
+                        <h4 style="margin-top: 1rem; color: #ff6b35;">Channel 2 (Melody)</h4>
+                        <button id="exportChannel2MidiCurrent" class="btn-secondary">📄 Current Pattern</button>
+                        <button id="exportChannel2MidiAll" class="btn-secondary">📚 All Patterns</button>
+                        
+                        <h4 style="margin-top: 1rem; color: #888;">Drums</h4>
+                        <button id="exportDrumMidiCurrent" class="btn-secondary">📄 Current Pattern</button>
+                        <button id="exportDrumMidiAll" class="btn-secondary">📚 All Patterns</button>
+                    </details>
                 </div>
                 
                 <div class="section help-text">
@@ -615,6 +827,20 @@
                                 </div>
                             </div>
                             <button id="mutePiano" class="mute-btn">M</button>
+                        </div>
+                        <div class="mixer-channel">
+                            <div class="channel-label">CHANNEL 2</div>
+                            <div class="fader-section">
+                                <div class="meter-container">
+                                    <div class="meter" id="channel2Meter"></div>
+                                </div>
+                                <div class="fader-controls">
+                                    <input type="range" id="channel2Volume" class="fader" min="-60" max="6" value="-25" step="0.1">
+                                    <input type="number" id="channel2Db" class="db-input" min="-60" max="6" value="-25" step="0.1">
+                                    <span class="db-label">dB</span>
+                                </div>
+                            </div>
+                            <button id="muteChannel2" class="mute-btn">M</button>
                         </div>
                         <div class="mixer-channel">
                             <div class="channel-label">DRUMS</div>

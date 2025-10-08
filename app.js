@@ -43,11 +43,17 @@ class ChordProgressionApp {
         this.channel2Notes = {}; // { barIndex: [{ midi: 60, start: 0, duration: 0.5 }, ...] }
         this.channel2Synth = null;
         this.progressionAnalysis = null; // Cached chord analysis
+        this.channel2Source = 'chords'; // 'chords' or 'midi'
+        this.channel2Style = 'arpeggio';
+        this.channel2Pattern = 'up';
+        this.channel2Density = 'medium';
+        this.channel2OctaveRange = 1;
         this.songMode = false; // false = pattern mode, true = song mode
         this.chainPatterns = true; // Chain all filled patterns in sequence (default ON)
         this.loopChain = true; // Loop back to first pattern after last (default ON)
         this.autoRandomBeats = false; // Auto-generate random beats per pattern
         this.mutePiano = false; // Mute piano/synth output
+        this.muteChannel2 = false; // Mute Channel 2 output
         this.muteDrums = false; // Mute drum output
         this.songArrangement = []; // ['A1', 'A2', 'B1', 'A1', ...]
         this.currentSongStep = 0;
@@ -58,6 +64,16 @@ class ChordProgressionApp {
         this.arpTrigger = 'retrigger';
         this.arpMode = 'run';  // Default to Run (Continuous)
         this.arpSequenceIndex = 0;
+        
+        // Channel 2 Arpeggiator
+        this.channel2ArpEnabled = false;
+        this.channel2ArpReplace = true; // true = replace pattern, false = layer with pattern
+        this.channel2ArpPattern = 'up';
+        this.channel2ArpSpeed = '1/8';
+        this.channel2ArpOctaves = 1;
+        this.channel2ArpTrigger = 'retrigger';
+        this.channel2ArpMode = 'run';
+        this.channel2ArpSequenceIndex = 0;
         this.currentArpNote = null;  // Track current arp note for highlighting
         this.arpVisualizer = true;  // Visualizer on by default
         this.lastHitNote = null;  // Track last hit to prevent duplicates
@@ -417,11 +433,17 @@ class ChordProgressionApp {
         // Create drum sounds
         this.createDrumSounds();
         
+        // Create Channel 2 delay
+        this.channel2Delay = new Tone.FeedbackDelay({
+            delayTime: 0,
+            feedback: 0,
+            wet: 0
+        });
+        
         // Create Channel 2 synth (different sound)
         this.channel2Synth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { 
-                type: 'sine',  // Cleaner sound for melodies
-                partials: [1, 0.3, 0.1]
+                type: 'sawtooth'  // Rich sound for melodies
             },
             envelope: {
                 attack: 0.02,
@@ -431,7 +453,9 @@ class ChordProgressionApp {
             }
         });
         
-        this.channel2Synth.connect(this.reverb); // Connect to same reverb
+        // Chain: Channel2 Synth -> Channel2 Delay -> Reverb
+        this.channel2Synth.connect(this.channel2Delay);
+        this.channel2Delay.connect(this.reverb);
         this.channel2Synth.volume.value = -25; // Slightly quieter
         
         this.synth.volume.value = -20;
@@ -654,13 +678,274 @@ class ChordProgressionApp {
             document.getElementById('drumVolume').value = db;
         });
         
+        // Channel 2 volume controls
+        document.getElementById('channel2Volume')?.addEventListener('input', (e) => {
+            const db = parseFloat(e.target.value);
+            if (this.channel2Synth) {
+                this.channel2Synth.volume.value = db;
+            }
+            document.getElementById('channel2Db').value = db.toFixed(1);
+        });
+        
+        document.getElementById('channel2Db')?.addEventListener('input', (e) => {
+            const db = parseFloat(e.target.value);
+            if (this.channel2Synth) {
+                this.channel2Synth.volume.value = db;
+            }
+            document.getElementById('channel2Volume').value = db;
+        });
+        
+        // Mute buttons
+        document.getElementById('muteChannel2')?.addEventListener('click', (e) => {
+            this.muteChannel2 = !this.muteChannel2;
+            e.target.classList.toggle('active', this.muteChannel2);
+            if (this.channel2Synth) {
+                this.channel2Synth.volume.value = this.muteChannel2 ? -Infinity : parseFloat(document.getElementById('channel2Volume').value);
+            }
+        });
+        
+        // Channel 2 Synth controls
+        document.getElementById('channel2Waveform')?.addEventListener('change', (e) => {
+            if (this.channel2Synth) {
+                this.channel2Synth.set({ oscillator: { type: e.target.value } });
+            }
+        });
+        
+        document.getElementById('channel2Attack')?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (this.channel2Synth) {
+                this.channel2Synth.set({ envelope: { attack: val } });
+            }
+            document.getElementById('channel2AttackValue').textContent = val.toFixed(2) + 's';
+        });
+        
+        document.getElementById('channel2Decay')?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (this.channel2Synth) {
+                this.channel2Synth.set({ envelope: { decay: val } });
+            }
+            document.getElementById('channel2DecayValue').textContent = val.toFixed(2) + 's';
+        });
+        
+        document.getElementById('channel2Sustain')?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (this.channel2Synth) {
+                this.channel2Synth.set({ envelope: { sustain: val } });
+            }
+            document.getElementById('channel2SustainValue').textContent = val.toFixed(2);
+        });
+        
+        document.getElementById('channel2Release')?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (this.channel2Synth) {
+                this.channel2Synth.set({ envelope: { release: val } });
+            }
+            document.getElementById('channel2ReleaseValue').textContent = val.toFixed(2) + 's';
+        });
+        
+        // Channel 2 Effects
+        document.getElementById('channel2DelayTime')?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (this.channel2Delay) {
+                this.channel2Delay.delayTime.value = val;
+                this.channel2Delay.wet.value = val > 0 ? 0.5 : 0;
+            }
+        });
+        
+        document.getElementById('channel2DelayFeedback')?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (this.channel2Delay) {
+                this.channel2Delay.feedback.value = val;
+            }
+        });
+        
+        document.getElementById('channel2Reverb')?.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            // Channel 2 reverb is controlled by adjusting the main reverb wet when Channel 2 plays
+            // For now, this is informational - actual implementation would need a separate reverb send
+            console.log('Channel 2 reverb:', val);
+        });
+        
+        // Channel 2 Arpeggiator
+        document.getElementById('channel2ArpEnabled')?.addEventListener('change', (e) => {
+            this.channel2ArpEnabled = e.target.checked;
+        });
+        document.getElementById('channel2ArpReplace')?.addEventListener('change', (e) => {
+            this.channel2ArpReplace = e.target.checked;
+        });
+        document.getElementById('channel2ArpVisualizer')?.addEventListener('change', (e) => {
+            this.channel2ArpVisualizer = e.target.checked;
+        });
+        document.getElementById('channel2ArpPattern')?.addEventListener('change', (e) => {
+            this.channel2ArpPattern = e.target.value;
+        });
+        document.getElementById('channel2ArpSpeed')?.addEventListener('change', (e) => {
+            this.channel2ArpSpeed = e.target.value;
+        });
+        document.getElementById('channel2ArpOctaves')?.addEventListener('input', (e) => {
+            this.channel2ArpOctaves = parseInt(e.target.value);
+        });
+        document.getElementById('channel2ArpTrigger')?.addEventListener('change', (e) => {
+            this.channel2ArpTrigger = e.target.value;
+        });
+        document.getElementById('channel2ArpMode')?.addEventListener('change', (e) => {
+            this.channel2ArpMode = e.target.value;
+        });
+        
+        // Channel 2 Pattern Generator controls
+        document.getElementById('channel2PatternEnabled')?.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                this.generateChannel2Pattern();
+                this.buildGrid();
+            } else {
+                this.clearChannel2Pattern();
+                this.buildGrid();
+            }
+        });
+        
+        document.getElementById('channel2Source')?.addEventListener('change', (e) => {
+            this.channel2Source = e.target.value;
+            this.generateChannel2Pattern();
+            this.buildGrid();
+        });
+        
+        document.getElementById('channel2Style')?.addEventListener('change', (e) => {
+            this.channel2Style = e.target.value;
+            
+            // Update pattern options based on style
+            this.updateChannel2PatternOptions();
+            
+            this.generateChannel2Pattern();
+            this.buildGrid();
+        });
+        
+        document.getElementById('channel2Pattern')?.addEventListener('change', (e) => {
+            this.channel2Pattern = e.target.value;
+            this.generateChannel2Pattern();
+            this.buildGrid();
+        });
+        
+        document.getElementById('channel2Density')?.addEventListener('change', (e) => {
+            this.channel2Density = e.target.value;
+            this.generateChannel2Pattern();
+            this.buildGrid();
+        });
+        
+        document.getElementById('channel2OctaveRange')?.addEventListener('change', (e) => {
+            this.channel2OctaveRange = parseInt(e.target.value);
+            this.generateChannel2Pattern();
+            this.buildGrid();
+        });
+        
+        const regenerateBtn = document.getElementById('regenerateChannel2');
+        if (regenerateBtn) {
+            regenerateBtn.addEventListener('click', () => {
+                // Visual feedback
+                regenerateBtn.textContent = '⏳...';
+                regenerateBtn.disabled = true;
+                
+                setTimeout(() => {
+                    // Clear old pattern first to force regeneration
+                    this.channel2Notes = {};
+                    this.progressionAnalysis = null;
+                    
+                    this.generateChannel2Pattern();
+                    this.buildGrid();
+                    
+                    // Reset button
+                    regenerateBtn.textContent = '🔄 Current';
+                    regenerateBtn.disabled = false;
+                }, 100);
+            });
+        }
+        
+        const regenerateAllBtn = document.getElementById('regenerateAllChannel2');
+        if (regenerateAllBtn) {
+            regenerateAllBtn.addEventListener('click', () => {
+                if (!confirm('Regenerate Channel 2 for ALL patterns? This will overwrite existing Channel 2 notes.')) {
+                    return;
+                }
+                
+                // Visual feedback
+                regenerateAllBtn.textContent = '⏳ Processing...';
+                regenerateAllBtn.disabled = true;
+                
+                setTimeout(() => {
+                    let regeneratedCount = 0;
+                    const currentPattern = this.currentPattern;
+                    
+                    // Save current pattern first
+                    this.saveCurrentPattern();
+                    
+                    // Regenerate for all patterns that have progression
+                    Object.keys(this.patterns).forEach(patternId => {
+                        const pattern = this.patterns[patternId];
+                        if (pattern && pattern.progression && pattern.progression.length > 0) {
+                            console.log(`🔄 Regenerating Channel 2 for pattern ${patternId}...`);
+                            
+                            // Temporarily load this pattern
+                            this.progression = JSON.parse(JSON.stringify(pattern.progression));
+                            this.channel2Notes = {};
+                            this.progressionAnalysis = null;
+                            
+                            // Generate new Channel 2 pattern
+                            this.generateChannel2Pattern();
+                            
+                            // Save back to pattern
+                            this.patterns[patternId].channel2Notes = JSON.parse(JSON.stringify(this.channel2Notes));
+                            
+                            regeneratedCount++;
+                        }
+                    });
+                    
+                    // Restore current pattern
+                    this.loadPattern(currentPattern);
+                    
+                    // Reset button
+                    regenerateAllBtn.textContent = '🔄 All Patterns';
+                    regenerateAllBtn.disabled = false;
+                    
+                    alert(`✅ Regenerated Channel 2 for ${regeneratedCount} patterns!`);
+                }, 100);
+            });
+        }
+        
+        const syncBtn = document.getElementById('syncChannel2');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', () => {
+                const progressionBars = this.progression.length;
+                const channel2Bars = Object.keys(this.channel2Notes).length;
+                
+                if (channel2Bars === progressionBars) {
+                    alert('✅ Already synced!');
+                    return;
+                }
+                
+                // Visual feedback
+                syncBtn.textContent = '⏳ Syncing...';
+                syncBtn.disabled = true;
+                
+                setTimeout(() => {
+                    // Force regenerate to match progression
+                    this.channel2Notes = {};
+                    this.progressionAnalysis = null;
+                    this.generateChannel2Pattern();
+                    this.buildGrid();
+                    
+                    // Reset button
+                    syncBtn.textContent = '🔗 Sync to Progression';
+                    syncBtn.disabled = false;
+                    
+                    alert(`✅ Synced! Generated ${Object.keys(this.channel2Notes).length} bars.`);
+                }, 100);
+            });
+        }
+        
+        // Initialize Channel 2 pattern options
+        this.updateChannel2PatternOptions();
+        
         // Start meter animation
         this.startMeterAnimation();
-        
-        // Export drum MIDI
-        document.getElementById('exportDrumMidi')?.addEventListener('click', () => {
-            this.exportDrumMidi();
-        });
         
         // Filter controls
         document.getElementById('filterCutoff')?.addEventListener('input', (e) => {
@@ -686,7 +971,13 @@ class ChordProgressionApp {
             this.reverb.wet.value = parseFloat(e.target.value);
         });
         
-        document.getElementById('exportMidi').addEventListener('click', () => this.exportMidi());
+        // MIDI Export
+        document.getElementById('exportMidiCurrent')?.addEventListener('click', () => this.exportMidi(false));
+        document.getElementById('exportMidiAll')?.addEventListener('click', () => this.exportMidi(true));
+        document.getElementById('exportChannel2MidiCurrent')?.addEventListener('click', () => this.exportChannel2Midi(false));
+        document.getElementById('exportChannel2MidiAll')?.addEventListener('click', () => this.exportChannel2Midi(true));
+        document.getElementById('exportDrumMidiCurrent')?.addEventListener('click', () => this.exportDrumMidi(false));
+        document.getElementById('exportDrumMidiAll')?.addEventListener('click', () => this.exportDrumMidi(true));
         
         // View controls
         document.getElementById('togglePianoRoll')?.addEventListener('click', () => this.togglePianoRollView());
@@ -1175,52 +1466,397 @@ class ChordProgressionApp {
         this.buildGrid();
     }
 
+    updateChannel2SyncStatus() {
+        const statusEl = document.getElementById('channel2SyncStatus');
+        if (!statusEl) return;
+        
+        const progressionBars = this.progression.length;
+        const channel2Bars = Object.keys(this.channel2Notes).length;
+        
+        if (channel2Bars === 0) {
+            statusEl.textContent = '⚠️ No pattern';
+            statusEl.style.color = '#ff6b35';
+        } else if (channel2Bars === progressionBars) {
+            statusEl.textContent = '✅ Synced';
+            statusEl.style.color = '#4CAF50';
+        } else {
+            statusEl.textContent = `⚠️ Out of sync (${channel2Bars}/${progressionBars} bars)`;
+            statusEl.style.color = '#ff9800';
+        }
+    }
+
+    updateChannel2PatternOptions() {
+        const patternSelect = document.getElementById('channel2Pattern');
+        const patternOptions = document.getElementById('patternOptions');
+        if (!patternSelect || !patternOptions) return;
+        
+        // Define available patterns per style
+        const stylePatterns = {
+            'arpeggio': [
+                { value: 'up', label: '↑ Up' },
+                { value: 'down', label: '↓ Down' },
+                { value: 'updown', label: '↕ Up-Down' },
+                { value: 'pendulum', label: '⟲ Pendulum' },
+                { value: 'random', label: '🎲 Random' }
+            ],
+            'melody': [], // No patterns (random by nature)
+            'ostinato': [
+                { value: 'up', label: '↑ Forward' },
+                { value: 'down', label: '↓ Backward' },
+                { value: 'random', label: '🎲 Random Order' }
+            ],
+            'pads': [], // No patterns (sustained)
+            'bass': [
+                { value: 'up', label: '↑ Root Up' },
+                { value: 'down', label: '↓ Root Down' },
+                { value: 'random', label: '🎲 Walking Bass' }
+            ],
+            'staccato': [
+                { value: 'up', label: '↑ Up' },
+                { value: 'down', label: '↓ Down' },
+                { value: 'updown', label: '↕ Up-Down' },
+                { value: 'random', label: '🎲 Random' }
+            ],
+            'strumming': [
+                { value: 'down', label: '↓ Down Strum' },
+                { value: 'up', label: '↑ Up Strum' },
+                { value: 'updown', label: '↕ Down-Up Strum' },
+                { value: 'random', label: '🎲 Random Strum' }
+            ],
+            'piano': [
+                { value: 'block', label: '🎹 Block Chords' },
+                { value: 'broken', label: '🎼 Broken Chords' },
+                { value: 'alberti', label: '🎵 Alberti Bass' },
+                { value: 'waltz', label: '💃 Waltz (1-2-3)' }
+            ]
+        };
+        
+        const patterns = stylePatterns[this.channel2Style] || [];
+        
+        if (patterns.length === 0) {
+            // Hide pattern options
+            patternOptions.style.display = 'none';
+        } else {
+            // Show and populate pattern options
+            patternOptions.style.display = 'block';
+            
+            // Save current selection
+            const currentValue = patternSelect.value;
+            
+            // Clear and repopulate
+            patternSelect.innerHTML = '';
+            patterns.forEach(p => {
+                const option = document.createElement('option');
+                option.value = p.value;
+                option.textContent = p.label;
+                patternSelect.appendChild(option);
+            });
+            
+            // Restore selection if still valid, otherwise use first option
+            if (patterns.find(p => p.value === currentValue)) {
+                patternSelect.value = currentValue;
+            } else {
+                patternSelect.value = patterns[0].value;
+                this.channel2Pattern = patterns[0].value;
+            }
+        }
+    }
+
     generateChannel2Pattern() {
         if (!this.progression || this.progression.length === 0) {
             console.log('No progression to analyze');
+            this.updateChannel2SyncStatus();
             return;
         }
 
-        // Analyze progression with ChordAnalyzer
-        const analyzer = new ChordAnalyzer();
-        this.progressionAnalysis = analyzer.analyzeProgression(this.progression);
-        
-        console.log('Chord analysis:', this.progressionAnalysis);
-        
-        // Generate simple arpeggio pattern
+        // Generate pattern based on settings
         this.channel2Notes = {};
         
+        // Determine notes per bar based on density
+        const notesPerBar = {
+            'sparse': 2,
+            'medium': 4,
+            'dense': 8,
+            'verydense': 16
+        }[this.channel2Density];
+        
         this.progression.forEach((bar, barIndex) => {
-            const analysis = this.progressionAnalysis[barIndex];
-            if (!analysis || !analysis.analysis) return;
+            let baseNotes = []; // Pitch classes (0-11)
+            let baseMidiOctave = 60; // C4
             
-            const chordTones = analysis.analysis.pitchClasses;
-            const scaleNotes = analysis.analysis.scaleNotes;
-            
-            // Generate arpeggio: chord tones + scale notes
-            const availableNotes = [...chordTones, ...scaleNotes].filter((note, index, arr) => arr.indexOf(note) === index);
-            
-            // Create melody notes in octave 4-5
-            const melodyNotes = availableNotes.map(note => note + 60); // C4 = 60
-            
-            // Simple arpeggio pattern: 4 notes per bar
-            this.channel2Notes[barIndex] = [];
-            for (let i = 0; i < 4; i++) {
-                const noteIndex = i % melodyNotes.length;
-                this.channel2Notes[barIndex].push({
-                    midi: melodyNotes[noteIndex],
-                    start: i * 0.25, // Quarter notes
-                    duration: 0.2
+            if (this.channel2Source === 'midi') {
+                // Source: Use existing MIDI notes from Channel 1
+                const midiNotes = [];
+                bar.chords.forEach(chord => {
+                    if (chord && chord.midiNotes) {
+                        midiNotes.push(...chord.midiNotes);
+                    }
                 });
+                
+                if (midiNotes.length === 0) {
+                    console.log(`No MIDI notes in bar ${barIndex}`);
+                    return;
+                }
+                
+                // Convert to pitch classes and find average octave
+                const avgMidi = midiNotes.reduce((a, b) => a + b, 0) / midiNotes.length;
+                baseMidiOctave = Math.floor(avgMidi / 12) * 12;
+                
+                // Get unique pitch classes
+                baseNotes = [...new Set(midiNotes.map(m => m % 12))].sort((a, b) => a - b);
+                
+            } else {
+                // Source: Use chord analysis
+                if (!this.progressionAnalysis) {
+                    const analyzer = new ChordAnalyzer();
+                    this.progressionAnalysis = analyzer.analyzeProgression(this.progression);
+                }
+                
+                const analysis = this.progressionAnalysis[barIndex];
+                if (!analysis || !analysis.analysis) return;
+                
+                const chordTones = analysis.analysis.pitchClasses || [];
+                const scaleNotes = analysis.analysis.scaleNotes || [];
+                
+                // Style determines which notes to use
+                if (this.channel2Style === 'arpeggio') {
+                    // Only chord tones
+                    baseNotes = [...chordTones];
+                } else if (this.channel2Style === 'melody') {
+                    // Chord tones + scale notes
+                    baseNotes = [...chordTones, ...scaleNotes].filter((note, index, arr) => arr.indexOf(note) === index);
+                } else if (this.channel2Style === 'ostinato') {
+                    // Repeating pattern with chord tones
+                    baseNotes = chordTones.slice(0, 3); // First 3 chord tones
+                } else if (this.channel2Style === 'pads') {
+                    // Sustained chord tones
+                    baseNotes = [...chordTones];
+                }
+                
+                baseNotes.sort((a, b) => a - b);
+            }
+            
+            // Convert pitch classes to MIDI notes in the base octave
+            let availableNotes = baseNotes.map(pc => baseMidiOctave + pc);
+            
+            // Expand to multiple octaves if needed
+            if (this.channel2OctaveRange > 1) {
+                const expandedNotes = [];
+                for (let octave = 0; octave < this.channel2OctaveRange; octave++) {
+                    baseNotes.forEach(pc => {
+                        expandedNotes.push(baseMidiOctave + pc + (octave * 12));
+                    });
+                }
+                availableNotes = expandedNotes.sort((a, b) => a - b);
+            }
+            
+            // Apply pattern
+            let melodyNotes = [...availableNotes];
+            if (this.channel2Pattern === 'down') {
+                melodyNotes.reverse();
+            } else if (this.channel2Pattern === 'updown') {
+                const up = [...melodyNotes];
+                const down = [...melodyNotes].reverse().slice(1, -1);
+                melodyNotes = [...up, ...down];
+            } else if (this.channel2Pattern === 'pendulum') {
+                // Pendulum: up, down, up, down...
+                const pattern = [];
+                for (let i = 0; i < notesPerBar; i++) {
+                    pattern.push(i % 2 === 0 ? melodyNotes[i % melodyNotes.length] : melodyNotes[melodyNotes.length - 1 - (i % melodyNotes.length)]);
+                }
+                melodyNotes = pattern;
+            } else if (this.channel2Pattern === 'random') {
+                // Fisher-Yates shuffle
+                for (let i = melodyNotes.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [melodyNotes[i], melodyNotes[j]] = [melodyNotes[j], melodyNotes[i]];
+                }
+            }
+            // 'up' pattern stays as-is (sorted ascending)
+            
+            // Generate notes based on style
+            this.channel2Notes[barIndex] = [];
+            const stepDuration = 1.0 / notesPerBar;
+            
+            if (this.channel2Style === 'pads') {
+                // Pads: Long sustained notes (all at once)
+                melodyNotes.slice(0, Math.min(3, melodyNotes.length)).forEach((midi) => {
+                    this.channel2Notes[barIndex].push({
+                        midi: midi,
+                        start: 0,
+                        duration: 1.0
+                    });
+                });
+            } else if (this.channel2Style === 'melody') {
+                // Melody: Random note selection with varied rhythm
+                for (let i = 0; i < notesPerBar; i++) {
+                    const noteIndex = Math.floor(Math.random() * melodyNotes.length);
+                    const varyDuration = Math.random() > 0.5;
+                    this.channel2Notes[barIndex].push({
+                        midi: melodyNotes[noteIndex],
+                        start: i * stepDuration,
+                        duration: varyDuration ? stepDuration * 1.2 : stepDuration * 0.6
+                    });
+                }
+            } else if (this.channel2Style === 'ostinato') {
+                // Ostinato: Repeating short pattern (3-4 notes)
+                const patternLength = Math.min(4, melodyNotes.length);
+                const ostPattern = melodyNotes.slice(0, patternLength);
+                for (let i = 0; i < notesPerBar; i++) {
+                    this.channel2Notes[barIndex].push({
+                        midi: ostPattern[i % ostPattern.length],
+                        start: i * stepDuration,
+                        duration: stepDuration * 0.75
+                    });
+                }
+            } else if (this.channel2Style === 'bass') {
+                // Bass: Use lowest notes with longer duration
+                const bassNotes = melodyNotes.slice(0, Math.min(3, melodyNotes.length));
+                const bassNotesPerBar = Math.min(notesPerBar, 4); // Max 4 bass notes
+                const bassDuration = 1.0 / bassNotesPerBar;
+                for (let i = 0; i < bassNotesPerBar; i++) {
+                    this.channel2Notes[barIndex].push({
+                        midi: bassNotes[i % bassNotes.length] - 12, // One octave lower
+                        start: i * bassDuration,
+                        duration: bassDuration * 0.9
+                    });
+                }
+            } else if (this.channel2Style === 'staccato') {
+                // Staccato: Short, punchy notes
+                for (let i = 0; i < notesPerBar; i++) {
+                    const noteIndex = i % melodyNotes.length;
+                    this.channel2Notes[barIndex].push({
+                        midi: melodyNotes[noteIndex],
+                        start: i * stepDuration,
+                        duration: stepDuration * 0.3 // Very short
+                    });
+                }
+            } else if (this.channel2Style === 'strumming') {
+                // Strumming: Quick succession of notes (like guitar strum)
+                const strumsPerBar = Math.min(notesPerBar, 8);
+                const strumDuration = 1.0 / strumsPerBar;
+                
+                for (let s = 0; s < strumsPerBar; s++) {
+                    const strumStart = s * strumDuration;
+                    let strumNotes = [...melodyNotes];
+                    
+                    // Apply strum direction
+                    if (this.channel2Pattern === 'up') {
+                        strumNotes.reverse(); // Low to high
+                    } else if (this.channel2Pattern === 'updown') {
+                        strumNotes = s % 2 === 0 ? strumNotes : [...strumNotes].reverse();
+                    } else if (this.channel2Pattern === 'random') {
+                        strumNotes.sort(() => Math.random() - 0.5);
+                    }
+                    // 'down' is default (high to low)
+                    
+                    const noteDelay = 0.015; // 15ms delay between notes
+                    strumNotes.forEach((midi, idx) => {
+                        this.channel2Notes[barIndex].push({
+                            midi: midi,
+                            start: strumStart + (idx * noteDelay),
+                            duration: strumDuration * 0.7
+                        });
+                    });
+                }
+            } else if (this.channel2Style === 'piano') {
+                // Piano: Different chord patterns
+                const chordsPerBar = Math.min(notesPerBar, 4);
+                const chordDuration = 1.0 / chordsPerBar;
+                const chordNotes = melodyNotes.slice(0, Math.min(4, melodyNotes.length));
+                
+                if (this.channel2Pattern === 'block' || !this.channel2Pattern) {
+                    // Block chords (all notes together)
+                    for (let c = 0; c < chordsPerBar; c++) {
+                        chordNotes.forEach((midi) => {
+                            this.channel2Notes[barIndex].push({
+                                midi: midi,
+                                start: c * chordDuration,
+                                duration: chordDuration * 0.9
+                            });
+                        });
+                    }
+                } else if (this.channel2Pattern === 'broken') {
+                    // Broken chords (notes in sequence)
+                    for (let c = 0; c < chordsPerBar; c++) {
+                        const noteTime = chordDuration / chordNotes.length;
+                        chordNotes.forEach((midi, idx) => {
+                            this.channel2Notes[barIndex].push({
+                                midi: midi,
+                                start: (c * chordDuration) + (idx * noteTime),
+                                duration: noteTime * 0.8
+                            });
+                        });
+                    }
+                } else if (this.channel2Pattern === 'alberti') {
+                    // Alberti bass pattern: low-high-mid-high
+                    const albertiPattern = [0, 2, 1, 2]; // Indices
+                    const noteTime = chordDuration / 4;
+                    for (let c = 0; c < chordsPerBar; c++) {
+                        albertiPattern.forEach((idx, step) => {
+                            if (chordNotes[idx]) {
+                                this.channel2Notes[barIndex].push({
+                                    midi: chordNotes[idx],
+                                    start: (c * chordDuration) + (step * noteTime),
+                                    duration: noteTime * 0.8
+                                });
+                            }
+                        });
+                    }
+                } else if (this.channel2Pattern === 'waltz') {
+                    // Waltz: bass-chord-chord (1-2-3)
+                    for (let c = 0; c < chordsPerBar; c++) {
+                        const beatTime = chordDuration / 3;
+                        // Beat 1: Bass note
+                        this.channel2Notes[barIndex].push({
+                            midi: chordNotes[0],
+                            start: c * chordDuration,
+                            duration: beatTime * 0.9
+                        });
+                        // Beat 2 & 3: Chord
+                        for (let beat = 1; beat < 3; beat++) {
+                            chordNotes.slice(1).forEach((midi) => {
+                                this.channel2Notes[barIndex].push({
+                                    midi: midi,
+                                    start: (c * chordDuration) + (beat * beatTime),
+                                    duration: beatTime * 0.8
+                                });
+                            });
+                        }
+                    }
+                }
+            } else {
+                // Arpeggio: Sequential pattern through all notes
+                for (let i = 0; i < notesPerBar; i++) {
+                    const noteIndex = i % melodyNotes.length;
+                    this.channel2Notes[barIndex].push({
+                        midi: melodyNotes[noteIndex],
+                        start: i * stepDuration,
+                        duration: stepDuration * 0.8
+                    });
+                }
             }
         });
         
-        console.log('Generated Channel 2 pattern:', this.channel2Notes);
+        // Validate generated pattern
+        const totalNotes = Object.values(this.channel2Notes).reduce((sum, notes) => sum + notes.length, 0);
+        console.log(`✅ Generated Channel 2 pattern: ${Object.keys(this.channel2Notes).length} bars, ${totalNotes} notes total`);
+        
+        // Show feedback to user
+        const statusEl = document.getElementById('channel2SyncStatus');
+        if (statusEl && totalNotes > 0) {
+            statusEl.textContent = `✅ Generated ${totalNotes} notes`;
+            statusEl.style.color = '#4CAF50';
+            setTimeout(() => this.updateChannel2SyncStatus(), 2000);
+        }
+        
+        this.updateChannel2SyncStatus();
     }
 
     clearChannel2Pattern() {
         this.channel2Notes = {};
         this.progressionAnalysis = null;
+        this.updateChannel2SyncStatus();
     }
 
     changeZoom(octaves) {
@@ -1847,6 +2483,7 @@ class ChordProgressionApp {
         noteBlock.dataset.barIndex = barIdx;
         noteBlock.dataset.noteIndex = noteIdx;
         noteBlock.dataset.channel = 'channel2';
+        noteBlock.dataset.uniqueId = `ch2-${barIdx}-${noteIdx}`; // Unique ID for highlighting
         
         // Position based on note timing (start time within bar)
         const width = note.duration * 100; // Duration as percentage
@@ -3004,6 +3641,11 @@ class ChordProgressionApp {
             // Play drums for this bar
             this.playDrumPattern(this.currentBar, barDuration);
             
+            // Play Channel 2 notes for this bar
+            if (this.showChannel2 && !this.muteChannel2 && this.channel2Notes[this.currentBar]) {
+                this.playChannel2Notes(this.currentBar, barDuration);
+            }
+            
             // If multiple chords in bar, highlight per sub-chord
             if (bar.chords.length > 1) {
                 bar.chords.forEach((chord, chordIdx) => {
@@ -3051,13 +3693,36 @@ class ChordProgressionApp {
                     if (this.chainPatterns && !this.songMode) {
                         const nextPattern = this.getNextFilledPattern();
                         if (nextPattern) {
-                            console.log('Chaining to pattern:', nextPattern);
+                            console.log('🔗 Chaining to pattern:', nextPattern);
+                            
+                            // Save current pattern before switching
+                            this.saveCurrentPattern();
                             
                             // Pre-load next pattern data without UI rebuild
                             if (this.patterns[nextPattern]) {
-                                this.progression = JSON.parse(JSON.stringify(this.patterns[nextPattern].progression));
-                                this.drumPatterns = JSON.parse(JSON.stringify(this.patterns[nextPattern].drumPatterns));
-                                this.notes = this.patterns[nextPattern].notes ? JSON.parse(JSON.stringify(this.patterns[nextPattern].notes)) : {};
+                                const pattern = this.patterns[nextPattern];
+                                this.progression = JSON.parse(JSON.stringify(pattern.progression));
+                                this.drumPatterns = JSON.parse(JSON.stringify(pattern.drumPatterns));
+                                this.notes = pattern.notes ? JSON.parse(JSON.stringify(pattern.notes)) : {};
+                                this.channel2Notes = pattern.channel2Notes ? JSON.parse(JSON.stringify(pattern.channel2Notes)) : {};
+                                
+                                // Restore Channel 2 settings
+                                if (pattern.channel2Settings) {
+                                    const settings = pattern.channel2Settings;
+                                    this.channel2Source = settings.source;
+                                    this.channel2Style = settings.style;
+                                    this.channel2Pattern = settings.pattern;
+                                    this.channel2Density = settings.density;
+                                    this.channel2OctaveRange = settings.octaveRange;
+                                    
+                                    console.log('🔗 Restored Channel 2 settings:', settings);
+                                }
+                                
+                                // Auto-generate Channel 2 if missing
+                                if (this.progression.length > 0 && Object.keys(this.channel2Notes).length === 0 && this.showChannel2) {
+                                    console.log('🎵 Auto-generating Channel 2 for chained pattern...');
+                                    this.generateChannel2Pattern();
+                                }
                             }
                             
                             // Update UI in background
@@ -3486,7 +4151,7 @@ class ChordProgressionApp {
         });
     }
 
-    exportMidi() {
+    exportMidi(allPatterns = false) {
         // Simple MIDI file builder (no external library needed)
         const createMidiFile = () => {
             const header = [0x4D, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, 0xE0];
@@ -3501,8 +4166,23 @@ class ChordProgressionApp {
             const tempo = Math.round(60000000 / this.bpm);
             events.push(0x00, 0xFF, 0x51, 0x03, (tempo >> 16) & 0xFF, (tempo >> 8) & 0xFF, tempo & 0xFF);
             
+            // Determine which progression to export
+            let progressionToExport = [];
+            if (allPatterns) {
+                // Export all filled patterns
+                Object.keys(this.patterns).forEach(patternId => {
+                    const pattern = this.patterns[patternId];
+                    if (pattern && pattern.progression && pattern.progression.length > 0) {
+                        progressionToExport = progressionToExport.concat(pattern.progression);
+                    }
+                });
+            } else {
+                // Export current pattern only
+                progressionToExport = this.progression;
+            }
+            
             // Add each bar's chords
-            this.progression.forEach((bar) => {
+            progressionToExport.forEach((bar) => {
                 bar.chords.forEach((chord) => {
                     if (chord && chord.midiNotes && chord.midiNotes.length > 0) {
                         const chordsInBar = bar.chords.length;
@@ -3547,12 +4227,102 @@ class ChordProgressionApp {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = 'chord-progression.mid';
+            const filename = allPatterns ? 'channel1-all-patterns.mid' : `channel1-${this.currentPattern}.mid`;
+            a.download = filename;
             a.click();
             URL.revokeObjectURL(url);
-            console.log('✅ MIDI exported!');
+            console.log('✅ Channel 1 MIDI exported:', filename);
         } catch (error) {
             console.error('MIDI Export Error:', error);
+            alert('Error: ' + error.message);
+        }
+    }
+
+    exportChannel2Midi(allPatterns = false) {
+        const createMidiFile = () => {
+            const header = [0x4D, 0x54, 0x68, 0x64, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x01, 0x01, 0xE0];
+            const trackHeader = [0x4D, 0x54, 0x72, 0x6B];
+            
+            const events = [];
+            const ticksPerBeat = 480;
+            const beatsPerBar = 4;
+            
+            // Add tempo event
+            const tempo = Math.round(60000000 / this.bpm);
+            events.push(0x00, 0xFF, 0x51, 0x03, (tempo >> 16) & 0xFF, (tempo >> 8) & 0xFF, tempo & 0xFF);
+            
+            // Determine which Channel 2 notes to export
+            let notesToExport = {};
+            if (allPatterns) {
+                // Export all patterns' Channel 2 notes
+                Object.keys(this.patterns).forEach(patternId => {
+                    const pattern = this.patterns[patternId];
+                    if (pattern && pattern.channel2Notes) {
+                        Object.keys(pattern.channel2Notes).forEach(barIdx => {
+                            const globalBarIdx = Object.keys(notesToExport).length;
+                            notesToExport[globalBarIdx] = pattern.channel2Notes[barIdx];
+                        });
+                    }
+                });
+            } else {
+                // Export current pattern only
+                notesToExport = this.channel2Notes;
+            }
+            
+            // Add Channel 2 notes
+            let currentTick = 0;
+            Object.keys(notesToExport).sort((a, b) => parseInt(a) - parseInt(b)).forEach(barIdx => {
+                const notes = notesToExport[barIdx];
+                if (notes && notes.length > 0) {
+                    notes.forEach(note => {
+                        // Calculate absolute tick position
+                        const barStartTick = parseInt(barIdx) * beatsPerBar * ticksPerBeat;
+                        const noteStartTick = barStartTick + Math.round(note.start * beatsPerBar * ticksPerBeat);
+                        const noteEndTick = noteStartTick + Math.round(note.duration * beatsPerBar * ticksPerBeat);
+                        
+                        // Note ON
+                        const deltaStart = noteStartTick - currentTick;
+                        const deltaStartBytes = this.encodeVariableLength(deltaStart);
+                        events.push(...deltaStartBytes, 0x90, note.midi, 0x60);
+                        currentTick = noteStartTick;
+                        
+                        // Note OFF
+                        const deltaEnd = noteEndTick - currentTick;
+                        const deltaEndBytes = this.encodeVariableLength(deltaEnd);
+                        events.push(...deltaEndBytes, 0x80, note.midi, 0x00);
+                        currentTick = noteEndTick;
+                    });
+                }
+            });
+            
+            // End of track
+            events.push(0x00, 0xFF, 0x2F, 0x00);
+            
+            // Track length
+            const trackLength = events.length;
+            const trackLengthBytes = [
+                (trackLength >> 24) & 0xFF,
+                (trackLength >> 16) & 0xFF,
+                (trackLength >> 8) & 0xFF,
+                trackLength & 0xFF
+            ];
+            
+            return new Uint8Array([...header, ...trackHeader, ...trackLengthBytes, ...events]);
+        };
+        
+        try {
+            const midiData = createMidiFile();
+            const blob = new Blob([midiData], { type: 'audio/midi' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const filename = allPatterns ? 'channel2-all-patterns.mid' : `channel2-${this.currentPattern}.mid`;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            console.log('✅ Channel 2 MIDI exported:', filename);
+        } catch (error) {
+            console.error('Channel 2 MIDI Export Error:', error);
             alert('Error: ' + error.message);
         }
     }
@@ -5455,6 +6225,122 @@ class ChordProgressionApp {
         }
     }
     
+    playChannel2Notes(barIndex, barDuration) {
+        const notes = this.channel2Notes[barIndex];
+        if (!notes || notes.length === 0) return;
+        
+        // If Channel 2 Arpeggiator is enabled
+        if (this.channel2ArpEnabled) {
+            // Collect all unique MIDI notes in this bar
+            const uniqueMidi = [...new Set(notes.map(n => n.midi))].sort((a, b) => a - b);
+            
+            if (uniqueMidi.length > 0) {
+                this.playChannel2Arpeggio(uniqueMidi, barDuration);
+            }
+            
+            // If NOT replacing, also play the original pattern
+            if (!this.channel2ArpReplace) {
+                notes.forEach((note, noteIdx) => {
+                    const startTime = note.start * barDuration * 1000;
+                    const duration = note.duration * barDuration;
+                    
+                    setTimeout(() => {
+                        if (this.isPlaying && this.channel2Synth) {
+                            const freq = Tone.Frequency(note.midi, 'midi').toFrequency();
+                            this.channel2Synth.triggerAttackRelease(freq, duration);
+                            this.highlightChannel2Note(barIndex, noteIdx, duration * 1000);
+                        }
+                    }, startTime);
+                });
+            }
+        } else {
+            // Play notes as-is (Pattern Generator mode)
+            notes.forEach((note, noteIdx) => {
+                const startTime = note.start * barDuration * 1000;
+                const duration = note.duration * barDuration;
+                
+                setTimeout(() => {
+                    if (this.isPlaying && this.channel2Synth) {
+                        const freq = Tone.Frequency(note.midi, 'midi').toFrequency();
+                        this.channel2Synth.triggerAttackRelease(freq, duration);
+                        this.highlightChannel2Note(barIndex, noteIdx, duration * 1000);
+                    }
+                }, startTime);
+            });
+        }
+    }
+
+    playChannel2Arpeggio(midiNotes, duration) {
+        // Similar to Channel 1 arpeggiator but for Channel 2
+        const speedMap = { '1/16': 16, '1/8': 8, '1/4': 4 };
+        const steps = speedMap[this.channel2ArpSpeed] || 8;
+        const stepDuration = duration / steps;
+        
+        // Expand notes with octaves
+        let expandedNotes = [...midiNotes];
+        for (let oct = 1; oct < this.channel2ArpOctaves; oct++) {
+            expandedNotes = expandedNotes.concat(midiNotes.map(n => n + (12 * oct)));
+        }
+        
+        // Apply pattern
+        let sequence = [...expandedNotes];
+        if (this.channel2ArpPattern === 'down') {
+            sequence.reverse();
+        } else if (this.channel2ArpPattern === 'updown') {
+            sequence = [...sequence, ...sequence.slice().reverse()];
+        } else if (this.channel2ArpPattern === 'random') {
+            sequence = sequence.sort(() => Math.random() - 0.5);
+        }
+        
+        // Play arpeggio
+        for (let i = 0; i < steps; i++) {
+            const noteIndex = this.channel2ArpMode === 'run' 
+                ? (this.channel2ArpSequenceIndex + i) % sequence.length
+                : i % sequence.length;
+            const midi = sequence[noteIndex];
+            
+            setTimeout(() => {
+                if (this.isPlaying && this.channel2Synth) {
+                    const freq = Tone.Frequency(midi, 'midi').toFrequency();
+                    this.channel2Synth.triggerAttackRelease(freq, stepDuration * 0.9);
+                }
+            }, i * stepDuration * 1000);
+        }
+        
+        // Update sequence index for continuous mode
+        if (this.channel2ArpMode === 'run') {
+            this.channel2ArpSequenceIndex = (this.channel2ArpSequenceIndex + steps) % sequence.length;
+        }
+    }
+
+    highlightChannel2Note(barIndex, noteIdx, duration) {
+        // TODO/ISSUE: Channel 2 note highlighting shows multiple notes lit up at once
+        // This happens because note duration (0.4s) overlaps with next note timing (0.5s)
+        // Need to either: 1) Reduce note duration, 2) Clear previous highlights, or 3) Adjust visual feedback
+        
+        // Find the Channel 2 note block using unique ID
+        const uniqueId = `ch2-${barIndex}-${noteIdx}`;
+        const noteBlocks = document.querySelectorAll(`.note-block.channel2-note[data-unique-id="${uniqueId}"]`);
+        
+        if (noteBlocks.length === 0) {
+            // Fallback: try to find by bar and note index without unique-id
+            const allChannel2Notes = document.querySelectorAll(`.note-block.channel2-note[data-bar-index="${barIndex}"][data-note-index="${noteIdx}"]`);
+            allChannel2Notes.forEach(block => {
+                block.classList.add('playing');
+                setTimeout(() => {
+                    block.classList.remove('playing');
+                }, duration);
+            });
+        } else {
+            noteBlocks.forEach(block => {
+                block.classList.add('playing');
+                setTimeout(() => {
+                    block.classList.remove('playing');
+                }, duration);
+            });
+        }
+    }
+
     playDrumPattern(barIndex, barDuration) {
         const pattern = this.drumPatterns[barIndex];
         if (!pattern) return;
@@ -5705,7 +6591,7 @@ class ChordProgressionApp {
         this.patterns[patternId].drumPatterns = tempDrumPatterns;
     }
     
-    exportDrumMidi() {
+    exportDrumMidi(allPatterns = false) {
         // General MIDI drum map
         const drumMap = {
             kick: 36,   // C1 - Bass Drum
@@ -5734,11 +6620,30 @@ class ChordProgressionApp {
         const tempo = Math.floor(60000000 / this.bpm);
         events.push([0, 0xFF, 0x51, 0x03, (tempo >> 16) & 0xFF, (tempo >> 8) & 0xFF, tempo & 0xFF]);
         
+        // Determine which drum patterns to export
+        let patternsToExport = [];
+        if (allPatterns) {
+            // Export all filled patterns
+            Object.keys(this.patterns).forEach(patternId => {
+                const pattern = this.patterns[patternId];
+                if (pattern && pattern.drumPatterns) {
+                    Object.keys(pattern.drumPatterns).forEach(barIdx => {
+                        patternsToExport.push(pattern.drumPatterns[barIdx]);
+                    });
+                }
+            });
+        } else {
+            // Export current pattern only
+            for (let barIdx = 0; barIdx < this.progression.length; barIdx++) {
+                if (this.drumPatterns[barIdx]) {
+                    patternsToExport.push(this.drumPatterns[barIdx]);
+                }
+            }
+        }
+        
         // Add drum notes
-        const numBars = this.progression.length;
-        for (let barIdx = 0; barIdx < numBars; barIdx++) {
-            const pattern = this.drumPatterns[barIdx];
-            if (!pattern) continue;
+        patternsToExport.forEach((pattern, barIdx) => {
+            if (!pattern) return;
             
             Object.keys(drumMap).forEach(drumKey => {
                 const midiNote = drumMap[drumKey];
@@ -5757,7 +6662,7 @@ class ChordProgressionApp {
                     }
                 });
             });
-        }
+        });
         
         // Sort events by time
         events.sort((a, b) => a[0] - b[0]);
@@ -5797,11 +6702,12 @@ class ChordProgressionApp {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `drums_pattern_${this.currentPattern}.mid`;
+        const filename = allPatterns ? 'drums-all-patterns.mid' : `drums-${this.currentPattern}.mid`;
+        a.download = filename;
         a.click();
         URL.revokeObjectURL(url);
         
-        console.log('Exported drum MIDI:', `drums_pattern_${this.currentPattern}.mid`);
+        console.log('✅ Drums MIDI exported:', filename);
     }
     
     encodeVLQ(value) {
@@ -5820,9 +6726,11 @@ class ChordProgressionApp {
     
     startMeterAnimation() {
         const pianoMeter = document.getElementById('pianoMeter');
+        const channel2Meter = document.getElementById('channel2Meter');
         const drumMeter = document.getElementById('drumMeter');
         
         let pianoLevel = 0;
+        let channel2Level = 0;
         let drumLevel = 0;
         
         setInterval(() => {
@@ -5830,15 +6738,25 @@ class ChordProgressionApp {
             if (this.isPlaying) {
                 // Piano meter - random activity
                 pianoLevel = Math.random() * 60 + 20; // 20-80%
+                
+                // Channel 2 meter - only active if Channel 2 is enabled and not muted
+                if (this.showChannel2 && !this.muteChannel2) {
+                    channel2Level = Math.random() * 50 + 30; // 30-80%
+                } else {
+                    channel2Level *= 0.8;
+                }
+                
                 // Drum meter - random activity
                 drumLevel = Math.random() * 70 + 10; // 10-80%
             } else {
                 // Decay when not playing
                 pianoLevel *= 0.8;
+                channel2Level *= 0.8;
                 drumLevel *= 0.8;
             }
             
             if (pianoMeter) pianoMeter.style.height = `${pianoLevel}%`;
+            if (channel2Meter) channel2Meter.style.height = `${channel2Level}%`;
             if (drumMeter) drumMeter.style.height = `${drumLevel}%`;
         }, 50);
     }
@@ -5869,7 +6787,14 @@ class ChordProgressionApp {
     }
     
     switchPattern(patternId) {
-        console.log('Switching to pattern:', patternId);
+        console.log('🔄 Switching to pattern:', patternId);
+        console.log('Before save - Current pattern:', this.currentPattern);
+        console.log('Before save - Channel 2 bars:', Object.keys(this.channel2Notes).length);
+        console.log('Before save - Settings:', {
+            style: this.channel2Style,
+            pattern: this.channel2Pattern,
+            source: this.channel2Source
+        });
         
         // Save current pattern
         this.saveCurrentPattern();
@@ -5891,8 +6816,25 @@ class ChordProgressionApp {
         this.patterns[this.currentPattern] = {
             progression: JSON.parse(JSON.stringify(this.progression)),
             drumPatterns: JSON.parse(JSON.stringify(this.drumPatterns)),
-            notes: this.notes ? JSON.parse(JSON.stringify(this.notes)) : {}
+            notes: this.notes ? JSON.parse(JSON.stringify(this.notes)) : {},
+            channel2Notes: this.channel2Notes ? JSON.parse(JSON.stringify(this.channel2Notes)) : {},
+            // Save Channel 2 settings
+            channel2Settings: {
+                source: this.channel2Source,
+                style: this.channel2Style,
+                pattern: this.channel2Pattern,
+                density: this.channel2Density,
+                octaveRange: this.channel2OctaveRange
+            }
         };
+        
+        console.log(`💾 Saved pattern ${this.currentPattern}:`, {
+            bars: this.progression.length,
+            drumBars: Object.keys(this.drumPatterns).length,
+            channel2Bars: Object.keys(this.channel2Notes).length,
+            channel2Style: this.channel2Style,
+            channel2Pattern: this.channel2Pattern
+        });
         
         // Mark pattern as having data
         const btn = document.querySelector(`.pattern-btn[data-pattern="${this.currentPattern}"]`);
@@ -5900,25 +6842,86 @@ class ChordProgressionApp {
     }
     
     loadPattern(patternId) {
+        console.log(`📂 Loading pattern ${patternId}...`);
+        console.log('Pattern exists?', !!this.patterns[patternId]);
+        
         if (this.patterns[patternId]) {
-            // Load existing pattern with original bar numbers
-            this.progression = JSON.parse(JSON.stringify(this.patterns[patternId].progression));
-            this.drumPatterns = JSON.parse(JSON.stringify(this.patterns[patternId].drumPatterns));
-            this.notes = this.patterns[patternId].notes ? JSON.parse(JSON.stringify(this.patterns[patternId].notes)) : {};
+            const pattern = this.patterns[patternId];
+            console.log('Pattern data:', {
+                hasProg: !!pattern.progression,
+                hasDrums: !!pattern.drumPatterns,
+                hasChannel2: !!pattern.channel2Notes,
+                hasSettings: !!pattern.channel2Settings,
+                channel2Bars: pattern.channel2Notes ? Object.keys(pattern.channel2Notes).length : 0
+            });
             
-            console.log('Loaded pattern:', patternId, 'Bars:', this.progression.map(b => b.barNum).join(','));
+            // Load existing pattern with original bar numbers
+            this.progression = JSON.parse(JSON.stringify(pattern.progression));
+            this.drumPatterns = JSON.parse(JSON.stringify(pattern.drumPatterns));
+            this.notes = pattern.notes ? JSON.parse(JSON.stringify(pattern.notes)) : {};
+            this.channel2Notes = pattern.channel2Notes ? JSON.parse(JSON.stringify(pattern.channel2Notes)) : {};
+            
+            console.log('After load - Channel 2 bars:', Object.keys(this.channel2Notes).length);
+            
+            // Restore Channel 2 settings
+            if (pattern.channel2Settings) {
+                const settings = pattern.channel2Settings;
+                console.log('Restoring settings:', settings);
+                
+                this.channel2Source = settings.source;
+                this.channel2Style = settings.style;
+                this.channel2Pattern = settings.pattern;
+                this.channel2Density = settings.density;
+                this.channel2OctaveRange = settings.octaveRange;
+                
+                // Update UI controls
+                const sourceEl = document.getElementById('channel2Source');
+                const styleEl = document.getElementById('channel2Style');
+                const densityEl = document.getElementById('channel2Density');
+                const octaveEl = document.getElementById('channel2OctaveRange');
+                
+                if (sourceEl) sourceEl.value = this.channel2Source;
+                if (styleEl) styleEl.value = this.channel2Style;
+                if (densityEl) densityEl.value = this.channel2Density;
+                if (octaveEl) octaveEl.value = this.channel2OctaveRange;
+                
+                // Update pattern options for this style
+                this.updateChannel2PatternOptions();
+                
+                const patternEl = document.getElementById('channel2Pattern');
+                if (patternEl) patternEl.value = this.channel2Pattern;
+            } else {
+                console.warn('⚠️ No channel2Settings found in pattern!');
+            }
+            
+            console.log(`✅ Loaded pattern ${patternId}:`, {
+                bars: this.progression.length,
+                drumBars: Object.keys(this.drumPatterns).length,
+                channel2Bars: Object.keys(this.channel2Notes).length,
+                channel2Style: this.channel2Style,
+                channel2Pattern: this.channel2Pattern
+            });
         } else {
             // Empty pattern - no bars
             this.progression = [];
             this.drumPatterns = {};
             this.notes = {};
+            this.channel2Notes = {};
             
-            console.log('Loaded empty pattern:', patternId);
+            console.log('📂 Loaded empty pattern:', patternId);
         }
         
         this.buildGrid();
         this.buildDrumGrid();
         this.analyzeProgression();
+        
+        // Auto-generate Channel 2 pattern if progression exists but no Channel 2 notes
+        if (this.progression.length > 0 && Object.keys(this.channel2Notes).length === 0 && this.showChannel2) {
+            console.log('🎵 Auto-generating Channel 2 pattern for new pattern...');
+            this.generateChannel2Pattern();
+        }
+        
+        this.updateChannel2SyncStatus();
         
         // Debug: show current bar numbers
         console.log('Current progression bar numbers:', this.progression.map(b => b.barNum));
