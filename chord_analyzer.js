@@ -103,19 +103,44 @@ class ChordAnalyzer {
         
         return bestMatch;
     }
-    
     /**
      * Calculate match score between intervals and template
      */
     matchScore(intervals, template) {
         let score = 0;
+        let matchedNotes = 0;
+        
+        // Count matching intervals
         for (const interval of template) {
             if (intervals.includes(interval)) {
-                score += 1;
+                score += 2; // Higher weight for matches
+                matchedNotes++;
             }
         }
+        
+        // Completeness is CRITICAL - prefer complete chords
+        const completeness = matchedNotes / template.length;
+        if (completeness === 1.0) {
+            score += 5; // Big bonus for 100% match
+        } else {
+            score += completeness * 2;
+        }
+        
+        // Strongly prefer exact matches (same number of notes)
+        if (intervals.length === template.length && matchedNotes === template.length) {
+            score += 3; // Exact match bonus
+        }
+        
+        // Penalize incomplete chords (e.g., 3 notes matching a 4-note chord)
+        if (matchedNotes < template.length) {
+            score -= (template.length - matchedNotes) * 2; // Harsh penalty for missing notes
+        }
+        
         // Penalize extra notes
-        score -= (intervals.length - template.length) * 0.5;
+        if (intervals.length > template.length) {
+            score -= (intervals.length - template.length) * 0.5;
+        }
+        
         return score;
     }
     
