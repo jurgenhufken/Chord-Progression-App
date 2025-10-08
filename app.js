@@ -217,7 +217,7 @@ class ChordProgressionApp {
     }
     
     loadChannel2Presets() {
-        fetch('data/channel2Presets.json')
+        fetch('data/channel2Presets-v2.json')
             .then(res => res.json())
             .then(data => {
                 this.channel2Presets = data.presets || [];
@@ -1608,20 +1608,23 @@ class ChordProgressionApp {
         if (!statusEl) return;
         
         const progressionBars = this.progression.length;
-        const channel2Bars = Object.keys(this.channel2Notes).length;
         
-        // Check if notes actually exist
-        const hasActualNotes = Object.values(this.channel2Notes).some(notes => notes && notes.length > 0);
+        // Count only bars with actual notes
+        const barsWithNotes = Object.keys(this.channel2Notes).filter(barIdx => {
+            const notes = this.channel2Notes[barIdx];
+            return notes && notes.length > 0;
+        }).length;
+        
         const totalNotes = Object.values(this.channel2Notes).reduce((sum, notes) => sum + (notes?.length || 0), 0);
         
-        if (!hasActualNotes || channel2Bars === 0) {
+        if (totalNotes === 0) {
             statusEl.textContent = '⚠️ No pattern';
             statusEl.style.color = '#ff6b35';
-        } else if (channel2Bars === progressionBars) {
+        } else if (barsWithNotes >= progressionBars) {
             statusEl.textContent = `✅ Synced (${totalNotes} notes)`;
             statusEl.style.color = '#4CAF50';
         } else {
-            statusEl.textContent = `⚠️ Out of sync (${channel2Bars}/${progressionBars} bars)`;
+            statusEl.textContent = `⚠️ Out of sync (${barsWithNotes}/${progressionBars} bars)`;
             statusEl.style.color = '#ff9800';
         }
     }
@@ -2856,34 +2859,70 @@ class ChordProgressionApp {
     applyVoicingTemplate(chordTones, template) {
         const { midiNotes } = chordTones;
         
-        // Sort MIDI notes - these are the ACTUAL notes from the piano roll
+        // Sort MIDI notes and get root
         const sortedMidi = [...midiNotes].sort((a, b) => a - b);
+        const root = sortedMidi[0];
         
-        // If we have fewer notes than the template wants, just cycle through what we have
-        // Example: 2 notes [C, E] with template [root, third, fifth, octave] 
-        // → Use [C, E, C, E] instead of forcing non-existent notes
+        // Create pitch class map (interval from root)
+        const pcMap = {};
+        sortedMidi.forEach(midi => {
+            const interval = (midi - root) % 12;
+            if (!pcMap[interval]) {
+                pcMap[interval] = midi;
+            }
+        });
+        
         const notes = [];
         
-        template.forEach((voicing, index) => {
-            // Simply cycle through available notes
-            const noteIndex = index % sortedMidi.length;
-            let midiNote = sortedMidi[noteIndex];
+        template.forEach(voicing => {
+            let midiNote = null;
+            let octaveOffset = 0;
+            let baseVoicing = voicing;
             
             // Handle octave modifiers
-            let octaveOffset = 0;
             if (voicing.endsWith('_low')) {
                 octaveOffset = -1;
+                baseVoicing = voicing.replace('_low', '');
             } else if (voicing.endsWith('_high')) {
                 octaveOffset = 1;
+                baseVoicing = voicing.replace('_high', '');
             }
             
-            // Special case: octave always adds 12
-            if (voicing === 'octave') {
-                midiNote = sortedMidi[0] + 12;
+            // Map voicing to interval
+            switch(baseVoicing) {
+                case 'root':
+                    midiNote = pcMap[0] || root;
+                    break;
+                case 'third':
+                    midiNote = pcMap[4] || pcMap[3] || sortedMidi[1] || root;
+                    break;
+                case 'fifth':
+                    midiNote = pcMap[7] || sortedMidi[2] || root;
+                    break;
+                case 'seventh':
+                case 'flat_seventh':
+                    midiNote = pcMap[10] || pcMap[11] || sortedMidi[3] || root;
+                    break;
+                case 'ninth':
+                    midiNote = (pcMap[2] || pcMap[1] || root) + 12;
+                    break;
+                case 'fourth':
+                    midiNote = pcMap[5] || root + 5;
+                    break;
+                case 'sixth':
+                    midiNote = pcMap[9] || root + 9;
+                    break;
+                case 'octave':
+                    midiNote = root + 12;
+                    break;
+                default:
+                    // Fallback: cycle through available notes
+                    midiNote = sortedMidi[notes.length % sortedMidi.length];
             }
             
-            // Apply octave offset
-            notes.push(midiNote + (octaveOffset * 12));
+            if (midiNote) {
+                notes.push(midiNote + (octaveOffset * 12));
+            }
         });
         
         return notes;
