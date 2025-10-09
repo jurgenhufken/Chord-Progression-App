@@ -90,6 +90,21 @@ class ChordProgressionApp {
         this.channel2Mode = 'separate'; // 'overlay' or 'separate' - separate by default
         this.pianoRange = 'auto'; // 'auto' or 'full'
         
+        // === POC MODULES (NEW!) ===
+        this.channel2PlaybackMode = 'direct'; // 'direct' | 'follow' | 'style'
+        if (window.ImprovedChordDetector) {
+            this.chordDetectorV2 = new window.ImprovedChordDetector();
+            console.log('✅ POC: ImprovedChordDetector initialized');
+        }
+        if (window.Channel2FollowMode) {
+            this.followMode = new window.Channel2FollowMode(this);
+            console.log('✅ POC: Channel2FollowMode initialized');
+        }
+        if (window.ModeSwitcher) {
+            this.modeSwitcher = new window.ModeSwitcher(this);
+            console.log('✅ POC: ModeSwitcher initialized');
+        }
+        
         // Suggestions
         this.currentSuggestionBar = null;
         this.selectedBassNote = null;
@@ -549,7 +564,7 @@ class ChordProgressionApp {
             wet: 0
         });
         
-        // Create Channel 2 synth (different sound)
+        // Create Channel 2 synth (for main playback AND preview)
         this.channel2Synth = new Tone.PolySynth(Tone.Synth, {
             oscillator: { 
                 type: 'sawtooth'  // Rich sound for melodies
@@ -562,10 +577,15 @@ class ChordProgressionApp {
             }
         });
         
-        // Chain: Channel2 Synth -> Channel2 Delay -> Reverb
+        // Chain: Channel2 Synth -> Channel2 Delay -> Reverb -> Master
         this.channel2Synth.connect(this.channel2Delay);
         this.channel2Delay.connect(this.reverb);
-        this.channel2Synth.volume.value = -25; // Slightly quieter
+        this.reverb.toDestination();
+        this.channel2Synth.volume.value = -25;
+        
+        // Track MIDI source: 'main' = Channel 2 pattern, 'preview' = Style preview
+        this.channel2MidiSource = 'main';
+        this.stylePreviewNotes = []; // Store preview notes separately
         
         this.synth.volume.value = -20;
     }
@@ -912,11 +932,41 @@ class ChordProgressionApp {
             }
         });
         
+        // Channel 2 Mute toggle (affects ALL channel 2 playback)
+        document.getElementById('channel2Mute')?.addEventListener('change', (e) => {
+            if (this.channel2Synth) {
+                this.channel2Synth.volume.value = e.target.checked ? -Infinity : -25;
+            }
+            console.log(`🔇 Channel 2 ${e.target.checked ? 'MUTED' : 'UNMUTED'}`);
+        });
+        
         // Debounce timer for auto-regenerate
         this.channel2RegenerateTimer = null;
         
         // Setup preset menu
         this.setupPresetMenu();
+        
+        // Setup style generator section
+        this.setupStyleGenerator();
+        
+        // === POC: Mode Switcher Event Listeners ===
+        document.querySelectorAll('input[name="ch2mode"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (this.modeSwitcher) {
+                    this.modeSwitcher.setMode(e.target.value);
+                    this.channel2PlaybackMode = e.target.value;
+                    console.log(`🔀 Channel 2 mode: ${e.target.value}`);
+                }
+            });
+        });
+        
+        // Follow Mode pattern selector
+        document.getElementById('followModePattern')?.addEventListener('change', (e) => {
+            if (this.followMode) {
+                this.followMode.setPattern(e.target.value);
+                console.log(`🎵 Follow Mode pattern: ${e.target.value}`);
+            }
+        });
         
         const autoRegenerate = (changeName) => {
             // Clear any pending regeneration
@@ -1716,6 +1766,968 @@ class ChordProgressionApp {
         document.getElementById('channel2ModalOctaves')?.addEventListener('change', (e) => {
             this.channel2OctaveRange = parseInt(e.target.value);
         });
+    }
+    
+    initializeStyles() {
+        return {
+            'pop-basic': {
+                name: 'Pop Basic',
+                description: 'Block chord patterns with melodic fills (4-bar phrase)',
+                phraseLength: 4,
+                generate: (allChordTones, phraseIndex, variation) => {
+                    // Complete 4-bar performance
+                    const notes = [];
+                    const barsInPhrase = Math.min(4, allChordTones.length);
+                    
+                    for (let bar = 0; bar < barsInPhrase; bar++) {
+                        const chordTones = allChordTones[bar] || [];
+                        const barStart = bar * 4;
+                        
+                        // Bar 1-3: Whole notes
+                        if (bar < 3) {
+                            chordTones.slice(0, 3).forEach((midi, idx) => {
+                                notes.push({ 
+                                    midi, 
+                                    start: barStart, 
+                                    duration: 3.8, 
+                                    velocity: 85 - (idx * 5) 
+                                });
+                            });
+                        }
+                        
+                        // Bar 4: Add melodic fill
+                        if (bar === 3 && variation > 30) {
+                            chordTones.slice(0, 3).forEach((midi, idx) => {
+                                notes.push({ midi, start: barStart, duration: 1.5, velocity: 85 - (idx * 5) });
+                            });
+                            if (chordTones[0]) {
+                                notes.push({ midi: chordTones[0] + 2, start: barStart + 2, duration: 0.5, velocity: 80 });
+                                notes.push({ midi: chordTones[1] || chordTones[0], start: barStart + 2.5, duration: 0.5, velocity: 75 });
+                                notes.push({ midi: chordTones[2] || chordTones[0], start: barStart + 3, duration: 0.5, velocity: 80 });
+                            }
+                        }
+                    }
+                    return notes;
+                }
+            },
+            'techno-arp': {
+                name: 'Techno Arp',
+                description: '16th note arpeggios with rhythmic accents. Perfect for electronic music.',
+                generate: (chordTones, barIndex, variation) => {
+                    const notes = [];
+                    const sorted = [...chordTones].sort((a, b) => a - b);
+                    for (let i = 0; i < 16; i++) {
+                        const midi = sorted[i % sorted.length];
+                        const isAccent = i % 4 === 0;
+                        if (Math.random() * 100 > variation && !isAccent) continue;
+                        notes.push({ midi, start: i * 0.25, duration: 0.2, velocity: isAccent ? 95 : 70 });
+                    }
+                    return notes;
+                }
+            },
+            'jazz-ii-v-i': {
+                name: 'Jazz Comp II–V–I',
+                description: 'Swinging II-V-I progressions with syncopation',
+                generate: (chordTones, barIndex, variation) => {
+                    const notes = [];
+                    const voicing = chordTones.length > 2 ? chordTones.slice(0, 3) : chordTones;
+                    const swing = 0.08;
+                    const hits = [0, 1.5 + swing, 3 + swing * 0.5];
+                    hits.forEach((pos, hitIdx) => {
+                        voicing.forEach((midi, idx) => {
+                            notes.push({ midi, start: pos, duration: 0.25, velocity: 88 - (idx * 8) - (hitIdx * 3) });
+                        });
+                    });
+                    return notes;
+                }
+            },
+            'baroque-cadence': {
+                name: 'Baroque',
+                description: 'Classical cadence patterns with voice leading',
+                generate: (chordTones, barIndex, variation) => {
+                    const notes = [];
+                    const sorted = [...chordTones].sort((a, b) => a - b);
+                    // Arpeggiated pattern
+                    sorted.forEach((midi, idx) => {
+                        notes.push({ midi, start: idx * 0.5, duration: 0.4, velocity: 80 });
+                    });
+                    // Add passing tone
+                    if (variation > 40 && sorted.length > 1) {
+                        notes.push({ midi: sorted[0] + 1, start: 2, duration: 0.2, velocity: 70 });
+                    }
+                    return notes;
+                }
+            }
+        };
+    }
+    
+    setupStyleGenerator() {
+        // Style parameters
+        this.styleParams = {
+            currentStyle: 'pop-basic',
+            phraseLength: 4,
+            variation: 50,
+            octave: 0
+        };
+        
+        // Style definitions
+        this.styles = this.initializeStyles();
+        
+        // Style card selection
+        const styleCards = document.querySelectorAll('.style-card');
+        const styleSelector = document.getElementById('styleSelector');
+        const styleDescription = document.getElementById('styleDescription');
+        
+        const styleDescriptions = {
+            'pop-basic': '🎸 Pop Basic - Block chord patterns with melodic fills',
+            'techno-arp': '🔊 Techno Arp - 16th note arpeggios with rhythmic accents',
+            'jazz-ii-v-i': '🎺 Jazz Comp - Swinging II-V-I progressions with syncopation',
+            'baroque-cadence': '🎻 Baroque - Classical cadence patterns with voice leading'
+        };
+        
+        const selectStyle = (styleId) => {
+            this.styleParams.currentStyle = styleId;
+            
+            // Update card selection
+            styleCards.forEach(card => {
+                if (card.dataset.style === styleId) {
+                    card.style.border = '2px solid #00d4ff';
+                    card.style.background = 'rgba(0, 212, 255, 0.15)';
+                    card.style.boxShadow = '0 0 15px rgba(0, 212, 255, 0.3)';
+                } else {
+                    card.style.border = '2px solid #333';
+                    card.style.background = '#1a1a2e';
+                    card.style.boxShadow = 'none';
+                }
+            });
+            
+            // Update hidden selector
+            if (styleSelector) styleSelector.value = styleId;
+            
+            // Update description
+            if (styleDescription) {
+                styleDescription.textContent = styleDescriptions[styleId] || styleId;
+            }
+            
+            // Auto-update preview
+            this.updateStylePreview();
+        };
+        
+        // Card click handlers
+        styleCards.forEach(card => {
+            card.addEventListener('click', () => {
+                selectStyle(card.dataset.style);
+            });
+        });
+        
+        // Initialize first card as selected
+        if (styleCards.length > 0) {
+            selectStyle(styleCards[0].dataset.style);
+        }
+        
+        // Fallback for selector change
+        styleSelector?.addEventListener('change', (e) => {
+            selectStyle(e.target.value);
+        });
+        
+        // Initialize description and preview
+        if (styleDescription) {
+            const style = this.styles[this.styleParams.currentStyle];
+            styleDescription.textContent = style ? style.description : '';
+        }
+        // Delay initial preview until progression is loaded
+        setTimeout(() => this.updateStylePreview(), 100);
+        
+        // Phrase length slider
+        document.getElementById('stylePhraseSlider')?.addEventListener('input', (e) => {
+            this.styleParams.phraseLength = parseInt(e.target.value);
+            document.getElementById('stylePhraseLength').textContent = e.target.value + ' bars';
+            this.updateStylePreview();
+        });
+        
+        // Variation slider
+        document.getElementById('styleVariationSlider')?.addEventListener('input', (e) => {
+            this.styleParams.variation = parseInt(e.target.value);
+            document.getElementById('styleVariation').textContent = e.target.value + '%';
+            this.updateStylePreview();
+        });
+        
+        // Octave slider
+        document.getElementById('styleOctaveSlider')?.addEventListener('input', (e) => {
+            this.styleParams.octave = parseInt(e.target.value);
+            document.getElementById('styleOctave').textContent = e.target.value;
+            this.updateStylePreview();
+        });
+        
+        // Preview button
+        document.getElementById('stylePreviewBtn')?.addEventListener('click', async () => {
+            // CRITICAL: Ensure Tone.js context is started
+            if (Tone.context.state !== 'running') {
+                await Tone.context.resume();
+                console.log('🎵 Audio context resumed');
+            }
+            
+            // Start audio context
+            await Tone.start();
+            console.log('🎵 Tone.js started, context state:', Tone.context.state);
+            
+            this.previewStyle();
+        });
+        
+        // Stop button
+        document.getElementById('styleStopBtn')?.addEventListener('click', () => {
+            this.stopStylePreview();
+        });
+        
+        // Apply buttons
+        document.getElementById('styleApplyCurrent')?.addEventListener('click', () => {
+            this.applyStyle(false);
+        });
+        
+        document.getElementById('styleApplyAll')?.addEventListener('click', () => {
+            this.applyStyle(true);
+        });
+        
+        // Randomize button
+        document.getElementById('styleRandomize')?.addEventListener('click', () => {
+            this.randomizeStyle();
+        });
+    }
+    
+    updateStylePreview() {
+        // Update visual preview only (no audio)
+        const notes = this.generateStylePattern();
+        
+        if (notes.length === 0) {
+            console.warn('No notes generated for preview');
+            return;
+        }
+        
+        console.log(`🎨 Updated preview: ${notes.length} notes`);
+        this.drawStylePreview(notes);
+    }
+    
+    previewStyle() {
+        console.log('🎹 Previewing style:', this.styleParams.currentStyle);
+        
+        // Generate preview pattern
+        const notes = this.generateStylePattern();
+        
+        if (notes.length === 0) {
+            console.warn('❌ No notes generated for preview');
+            return;
+        }
+        
+        console.log(`✅ Generated ${notes.length} preview notes`);
+        
+        // Store preview notes
+        this.stylePreviewNotes = notes;
+        
+        // Draw preview
+        this.drawStylePreview(notes);
+        
+        // SWITCH MIDI SOURCE TO PREVIEW
+        this.channel2MidiSource = 'preview';
+        this.channel2PreviewActive = true; // Block main playback
+        console.log('🔀 MIDI SOURCE: PREVIEW (main playback blocked)');
+        
+        // Update UI indicator
+        const indicator = document.getElementById('channel2MidiSource');
+        if (indicator) {
+            indicator.textContent = '🎹 MIDI SOURCE: PREVIEW';
+            indicator.style.background = 'rgba(255, 165, 0, 0.1)';
+            indicator.style.borderLeftColor = '#ff9800';
+            indicator.style.color = '#ff9800';
+        }
+        
+        // Start preview loop
+        this.playStylePreview(notes);
+    }
+    
+    generateStylePattern() {
+        const style = this.styles[this.styleParams.currentStyle];
+        if (!style) {
+            console.error('Style not found:', this.styleParams.currentStyle);
+            return [];
+        }
+        
+        if (!this.progression || this.progression.length === 0) {
+            console.warn('No progression loaded yet');
+            return [];
+        }
+        
+        console.log('Generating style pattern:', this.styleParams.currentStyle);
+        console.log('Phrase length:', this.styleParams.phraseLength);
+        console.log('Progression length:', this.progression.length);
+        
+        // Collect all chord tones for the phrase
+        const allChordTones = [];
+        const barsToGenerate = Math.min(this.styleParams.phraseLength, this.progression.length);
+        
+        for (let barIdx = 0; barIdx < barsToGenerate; barIdx++) {
+            const bar = this.progression[barIdx];
+            const chordTonesObj = this.getChordTonesForBar(bar);
+            
+            if (!chordTonesObj || !chordTonesObj.midiNotes || chordTonesObj.midiNotes.length === 0) {
+                console.warn('No chord tones for bar', barIdx);
+                allChordTones.push([60, 64, 67]); // Default to C major if missing
+                continue;
+            }
+            
+            // Apply octave shift
+            let chordTones = chordTonesObj.midiNotes.map(m => m + (this.styleParams.octave * 12));
+            console.log(`Bar ${barIdx}: ${chordTones.length} chord tones (${chordTones.length}) ${JSON.stringify(chordTones)}`);
+            
+            allChordTones.push(chordTones);
+        }
+        
+        // Generate complete phrase with all bars at once
+        const notes = style.generate(allChordTones, 0, this.styleParams.variation);
+        
+        console.log(`✅ Generated ${notes.length} notes from ${allChordTones.length} bars`);
+        return notes;
+    }
+    
+    drawStylePreview(notes) {
+        const canvas = document.getElementById('stylePreview');
+        if (!canvas) return;
+        
+        canvas.style.display = 'block';
+        const ctx = canvas.getContext('2d');
+        
+        // Clear
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const totalBeats = this.styleParams.phraseLength * 4;
+        
+        // Draw notes
+        ctx.fillStyle = '#00d4ff';
+        notes.forEach(note => {
+            const x = (note.start / totalBeats) * canvas.width;
+            const y = canvas.height - ((note.midi - 48) / 36) * canvas.height;
+            const width = Math.max((note.duration / totalBeats) * canvas.width, 2);
+            ctx.fillRect(x, y - 2, width, 4);
+        });
+        
+        // Draw bar lines
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < this.styleParams.phraseLength; i++) {
+            const x = (i * 4 / totalBeats) * canvas.width;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+    }
+    
+    playStylePreview(notes) {
+        if (!this.channel2Synth) {
+            console.error('❌ Channel 2 synth not initialized!');
+            return;
+        }
+        
+        console.log(`🎵 Playing ${notes.length} preview notes on Channel 2 synth`);
+        
+        // Ensure synth is not muted
+        const muteCheckbox = document.getElementById('channel2Mute');
+        if (muteCheckbox?.checked) {
+            console.warn('⚠️ Channel 2 is MUTED - unmute to hear preview!');
+        }
+        
+        console.log(`🎵 Synth volume: ${this.channel2Synth.volume.value}dB`);
+        console.log(`🎵 Context state: ${Tone.context.state}`);
+        console.log(`🎵 Transport state: ${Tone.Transport.state}`);
+        
+        // Reset transport to clean state
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+        Tone.Transport.position = 0;
+        Tone.Transport.bpm.value = this.bpm;
+        
+        const barDuration = (60 / this.bpm) * 4; // 4 beats per bar
+        const totalDuration = this.styleParams.phraseLength * barDuration;
+        
+        console.log(`⏱️ Tempo: ${this.bpm}bpm, Bar: ${barDuration.toFixed(2)}s, Total: ${totalDuration.toFixed(2)}s`);
+        console.log(`📋 First 5 notes:`, notes.slice(0, 5).map(n => `MIDI${n.midi} @${n.start.toFixed(2)}b dur${n.duration.toFixed(2)}b`));
+        
+        // TEST: Trigger immediate note to verify synth works
+        console.log('🧪 TEST: Triggering immediate note C4 (MIDI 60)');
+        this.channel2Synth.triggerAttackRelease(Tone.Frequency(60, 'midi'), 0.5, '+0.1', 0.8);
+        
+        // Schedule notes directly without Part
+        notes.forEach((note, idx) => {
+            const time = (note.start / 4) * barDuration;
+            const duration = (note.duration / 4) * barDuration;
+            
+            if (idx < 3) {
+                console.log(`📋 Note ${idx}: time=${time.toFixed(2)}s, midi=${note.midi}, dur=${duration.toFixed(2)}s`);
+            }
+            
+            const scheduleId = Tone.Transport.schedule((schedTime) => {
+                console.log(`🎹 Preview CALLBACK: MIDI ${note.midi} at ${schedTime.toFixed(3)}s (now: ${Tone.now().toFixed(3)})`);
+                try {
+                    this.channel2Synth.triggerAttackRelease(
+                        Tone.Frequency(note.midi, 'midi'),
+                        duration,
+                        schedTime,
+                        note.velocity / 127
+                    );
+                    console.log(`✅ Triggered successfully`);
+                } catch (err) {
+                    console.error(`❌ Trigger failed:`, err);
+                }
+            }, time);
+            
+            if (idx < 3) {
+                console.log(`📌 Scheduled note ${idx} at ${time.toFixed(2)}s, scheduleId:`, scheduleId);
+            }
+        });
+        
+        // Loop
+        Tone.Transport.scheduleRepeat(() => {
+            console.log('🔁 Preview loop restart');
+            notes.forEach((note) => {
+                const time = (note.start / 4) * barDuration;
+                const duration = (note.duration / 4) * barDuration;
+                Tone.Transport.schedule((schedTime) => {
+                    this.channel2Synth.triggerAttackRelease(
+                        Tone.Frequency(note.midi, 'midi'),
+                        duration,
+                        schedTime,
+                        note.velocity / 127
+                    );
+                }, time);
+            });
+        }, totalDuration, totalDuration);
+        
+        console.log('▶️ Starting preview transport in 0.1s...');
+        const startTime = Tone.now() + 0.1;
+        Tone.Transport.start(startTime);
+        
+        setTimeout(() => {
+            console.log(`✅ Transport started! State: ${Tone.Transport.state}, Position: ${Tone.Transport.seconds.toFixed(2)}s`);
+        }, 200);
+        
+        // Store reference for stopping
+        this.stylePreviewLoop = { notes, totalDuration };
+    }
+    
+    stopStylePreview() {
+        console.log('⏹️ Stopping style preview');
+        
+        // SWITCH BACK TO MAIN MIDI SOURCE
+        this.channel2MidiSource = 'main';
+        this.channel2PreviewActive = false; // Unblock main playback
+        console.log('🔀 MIDI SOURCE: MAIN (main playback restored)');
+        
+        // Update UI indicator
+        const indicator = document.getElementById('channel2MidiSource');
+        if (indicator) {
+            indicator.textContent = '🎹 MIDI SOURCE: MAIN';
+            indicator.style.background = 'rgba(0, 255, 0, 0.1)';
+            indicator.style.borderLeftColor = '#2ecc71';
+            indicator.style.color = '#2ecc71';
+        }
+        
+        // Stop and clear transport
+        Tone.Transport.stop();
+        Tone.Transport.cancel();
+        
+        // Release all channel 2 synth voices
+        if (this.channel2Synth) {
+            this.channel2Synth.releaseAll();
+        }
+        
+        this.stylePreviewLoop = null;
+        this.stylePreviewNotes = [];
+    }
+    
+    applyStyle(applyAll = false) {
+        console.log(`🎹 Applying style: ${this.styleParams.currentStyle} (${applyAll ? 'ALL' : 'CURRENT'})`);
+        
+        const notes = this.generateStylePattern();
+        
+        if (notes.length === 0) {
+            console.warn('No notes to apply');
+            return;
+        }
+        
+        // Convert to channel2Notes format
+        this.channel2Notes = {};
+        
+        notes.forEach(note => {
+            const barIdx = Math.floor(note.start / 4);
+            const relativeStart = (note.start % 4) / 4; // 0-1 within bar
+            
+            if (!this.channel2Notes[barIdx]) {
+                this.channel2Notes[barIdx] = [];
+            }
+            
+            this.channel2Notes[barIdx].push({
+                midi: note.midi,
+                start: relativeStart,
+                duration: note.duration,
+                velocity: note.velocity
+            });
+        });
+        
+        this.buildGrid();
+        this.updateChannel2SyncStatus();
+        console.log(`✅ Applied style to ${Object.keys(this.channel2Notes).length} bars`);
+    }
+    
+    randomizeStyle() {
+        const styles = Object.keys(this.styles);
+        this.styleParams.currentStyle = styles[Math.floor(Math.random() * styles.length)];
+        this.styleParams.variation = Math.floor(Math.random() * 100);
+        this.styleParams.octave = Math.floor(Math.random() * 5) - 2;
+        
+        // Update UI
+        document.getElementById('styleSelector').value = this.styleParams.currentStyle;
+        document.getElementById('styleVariationSlider').value = this.styleParams.variation;
+        document.getElementById('styleVariation').textContent = this.styleParams.variation + '%';
+        document.getElementById('styleOctaveSlider').value = this.styleParams.octave;
+        document.getElementById('styleOctave').textContent = this.styleParams.octave;
+        
+        const style = this.styles[this.styleParams.currentStyle];
+        document.getElementById('styleDescription').textContent = style.description;
+        
+        console.log(`🎲 Randomized: ${this.styleParams.currentStyle}`);
+        
+        // Auto-preview
+        this.previewStyle();
+    }
+    
+    previewGenerative() {
+        // Stop existing preview first
+        if (this.generativePreviewLoop) {
+            this.generativePreviewLoop.stop();
+            this.generativePreviewLoop.dispose();
+            this.generativePreviewLoop = null;
+        }
+        
+        const canvas = document.getElementById('generativePreview');
+        canvas.style.display = 'block';
+        const ctx = canvas.getContext('2d');
+        
+        // Clear canvas
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Generate preview notes
+        const previewNotes = this.generateGenerativePreview();
+        
+        console.log(`Generated ${previewNotes.length} preview notes`);
+        if (previewNotes.length > 0) {
+            console.log('First note:', previewNotes[0]);
+        }
+        
+        // Draw notes
+        ctx.fillStyle = '#00d4ff';
+        previewNotes.forEach(note => {
+            const x = (note.start / this.generativeParams.phraseLength) * canvas.width;
+            const y = canvas.height - ((note.midi - 48) / 36) * canvas.height;
+            const width = (note.duration / this.generativeParams.phraseLength) * canvas.width;
+            
+            ctx.fillRect(x, y - 2, Math.max(width, 2), 4);
+        });
+        
+        // Draw bar lines
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < this.generativeParams.phraseLength; i++) {
+            const x = (i / this.generativeParams.phraseLength) * canvas.width;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, canvas.height);
+            ctx.stroke();
+        }
+        
+        // Play audio preview
+        this.playGenerativePreview(previewNotes);
+    }
+    
+    playGenerativePreview(notes) {
+        // Stop any existing preview
+        if (this.generativePreviewLoop) {
+            this.generativePreviewLoop.stop();
+            this.generativePreviewLoop.dispose();
+            this.generativePreviewLoop = null;
+        }
+        
+        // Mute normal playback
+        this.generativePreviewActive = true;
+        
+        // Use Channel 2 synth
+        if (!this.channel2Synth) {
+            console.warn('Channel 2 synth not initialized');
+            return;
+        }
+        
+        // Schedule notes (filter out invalid notes)
+        const phraseLength = this.generativeParams.phraseLength;
+        const validNotes = notes.filter(n => n.midi && n.duration && n.velocity);
+        
+        if (validNotes.length === 0) {
+            console.warn('No valid notes to preview');
+            return;
+        }
+        
+        // Convert notes to Tone.js format (bars to seconds)
+        const barDuration = Tone.Time('1m').toSeconds();
+        
+        const part = new Tone.Part((time, note) => {
+            if (note.midi && note.duration) {
+                this.channel2Synth.triggerAttackRelease(
+                    Tone.Frequency(note.midi, 'midi'),
+                    note.duration * barDuration,
+                    time,
+                    (note.velocity || 80) / 127
+                );
+            }
+        }, validNotes.map(n => ({
+            time: n.start * barDuration,
+            midi: n.midi,
+            duration: n.duration,
+            velocity: n.velocity || 80
+        })));
+        
+        part.loop = true;
+        part.loopEnd = phraseLength * barDuration;
+        part.start(0);
+        
+        this.generativePreviewLoop = part;
+        
+        // Start transport if not playing
+        if (Tone.Transport.state !== 'started') {
+            Tone.Transport.start();
+        }
+    }
+    
+    stopGenerativePreview() {
+        if (this.generativePreviewLoop) {
+            this.generativePreviewLoop.stop();
+            this.generativePreviewLoop.dispose();
+            this.generativePreviewLoop = null;
+        }
+        
+        // Unmute normal playback
+        this.generativePreviewActive = false;
+    }
+    
+    updateChannel2Envelope(shortEnvelope) {
+        if (!this.channel2Synth) return;
+        
+        if (shortEnvelope) {
+            // Short, tight envelope - no release tail
+            this.channel2Synth.set({
+                envelope: {
+                    attack: 0.001,
+                    decay: 0.05,
+                    sustain: 0.9,
+                    release: 0.01
+                }
+            });
+            console.log('✂️ Short envelope enabled');
+        } else {
+            // Normal envelope with release
+            this.channel2Synth.set({
+                envelope: {
+                    attack: 0.02,
+                    decay: 0.1,
+                    sustain: 0.3,
+                    release: 0.5
+                }
+            });
+            console.log('🎵 Normal envelope restored');
+        }
+    }
+    
+    generateGenerativePreview() {
+        const notes = [];
+        const barsToPreview = Math.min(this.generativeParams.phraseLength, this.progression.length);
+        
+        for (let barIdx = 0; barIdx < barsToPreview; barIdx++) {
+            const bar = this.progression[barIdx];
+            const chordTonesObj = this.getChordTonesForBar(bar);
+            if (!chordTonesObj) continue;
+            
+            const chordTones = chordTonesObj.midiNotes || [];
+            if (chordTones.length === 0) continue;
+            
+            // Determine note divisions based on features
+            let notesPerBar = this.generativeParams.density;
+            if (this.generativeFeatures['8ths']) notesPerBar = 8;
+            if (this.generativeFeatures['16ths']) notesPerBar = 16;
+            if (this.generativeFeatures.triplets) notesPerBar = 12; // 3 per beat
+            
+            const stepDuration = 1.0 / notesPerBar;
+            let previousNote = notes.length > 0 ? notes[notes.length - 1].midi : null;
+            
+            const nextChordTonesObj = barIdx < barsToPreview - 1 ? 
+                this.getChordTonesForBar(this.progression[barIdx + 1]) : null;
+            const nextChordTones = nextChordTonesObj ? nextChordTonesObj.midiNotes : null;
+            
+            // Arpeggio mode
+            let arpIndex = 0;
+            const sortedChordTones = [...chordTones].sort((a, b) => a - b);
+            
+            for (let i = 0; i < notesPerBar; i++) {
+                // Random rests feature
+                if (this.generativeFeatures.rests && Math.random() < 0.3) {
+                    continue;
+                }
+                
+                // Skip intervals feature (every N notes)
+                if (this.generativeFeatures.intervals && i % 3 === 1) {
+                    continue;
+                }
+                
+                let midi;
+                
+                // Arpeggio modes
+                if (this.generativeFeatures.arp_up) {
+                    midi = sortedChordTones[arpIndex % sortedChordTones.length];
+                    arpIndex++;
+                } else if (this.generativeFeatures.arp_down) {
+                    midi = sortedChordTones[sortedChordTones.length - 1 - (arpIndex % sortedChordTones.length)];
+                    arpIndex++;
+                } else {
+                    // Random note from chord
+                    midi = chordTones[Math.floor(Math.random() * chordTones.length)];
+                }
+                
+                if (midi) {
+                    // Apply octave shift
+                    midi += (this.generativeParams.octaveShift * 12);
+                    
+                    // Calculate note start position in bars (absolute time)
+                    let noteStart = barIdx + (i * stepDuration);
+                    
+                    // Swing timing feature
+                    if (this.generativeFeatures.swing && i % 2 === 1) {
+                        noteStart += stepDuration * 0.15;
+                    }
+                    
+                    // Apply syncopation (shift timing)
+                    if (this.generativeParams.syncopation > 0 && Math.random() * 100 < this.generativeParams.syncopation) {
+                        noteStart += stepDuration * 0.25;
+                    }
+                    
+                    // Note length
+                    let noteDuration = this.generativeParams.noteLength;
+                    
+                    // Velocity variation feature
+                    let velocity = 85;
+                    if (this.generativeFeatures.velocity) {
+                        velocity = Math.floor(Math.random() * 40) + 60; // 60-100
+                    }
+                    
+                    previousNote = midi;
+                    notes.push({
+                        midi: midi,
+                        start: noteStart,
+                        duration: noteDuration,
+                        velocity: velocity
+                    });
+                    
+                    // Chord stacks feature - add harmony notes
+                    if (this.generativeFeatures.chords && Math.random() < 0.4) {
+                        const intervals = [3, 4, 7]; // 3rd, 4th, 5th
+                        const interval = intervals[Math.floor(Math.random() * intervals.length)];
+                        notes.push({
+                            midi: midi + interval,
+                            start: noteStart,
+                            duration: noteDuration,
+                            velocity: velocity - 10
+                        });
+                    }
+                }
+            }
+        }
+        
+        return notes;
+    }
+    
+    applyGenerative(applyAll = false) {
+        console.log(`🎲 Applying generative pattern... (${applyAll ? 'ALL' : 'CURRENT'})`);
+        
+        // Stop preview
+        this.stopGenerativePreview();
+        
+        if (applyAll) {
+            // Apply to all patterns
+            const currentPattern = this.currentPattern;
+            
+            Object.keys(this.patterns).forEach(patternId => {
+                this.currentPattern = patternId;
+                const pattern = this.patterns[patternId];
+                if (pattern && pattern.progression) {
+                    this.progression = pattern.progression;
+                    
+                    // Generate for this pattern
+                    this.generateGenerativeForPattern();
+                    
+                    // Save to pattern
+                    pattern.channel2Notes = JSON.parse(JSON.stringify(this.channel2Notes));
+                    console.log(`  ✅ Applied to ${patternId}`);
+                }
+            });
+            
+            // Restore original pattern
+            const restorePattern = this.patterns[currentPattern];
+            if (restorePattern) {
+                this.progression = restorePattern.progression;
+                this.channel2Notes = restorePattern.channel2Notes || {};
+                this.currentPattern = currentPattern;
+            }
+            
+            this.buildGrid();
+            this.updateChannel2SyncStatus();
+            console.log(`✅ Applied generative to ALL patterns`);
+        } else {
+            // Apply to current pattern only
+            this.generateGenerativeForPattern();
+            this.buildGrid();
+            this.updateChannel2SyncStatus();
+            console.log(`✅ Applied generative to current pattern`);
+        }
+    }
+    
+    generateGenerativeForPattern() {
+        // Apply the generated pattern to channel 2
+        this.channel2Notes = {};
+        
+        const barsToGenerate = Math.min(this.generativeParams.phraseLength, this.progression.length);
+        
+        for (let barIdx = 0; barIdx < barsToGenerate; barIdx++) {
+            this.channel2Notes[barIdx] = [];
+            const bar = this.progression[barIdx];
+            const chordTonesObj = this.getChordTonesForBar(bar);
+            if (!chordTonesObj) continue;
+            
+            const chordTones = chordTonesObj.midiNotes || [];
+            if (chordTones.length === 0) continue;
+            
+            // Determine note divisions based on features
+            let notesPerBar = this.generativeParams.density;
+            if (this.generativeFeatures['8ths']) notesPerBar = 8;
+            if (this.generativeFeatures['16ths']) notesPerBar = 16;
+            if (this.generativeFeatures.triplets) notesPerBar = 12;
+            
+            const stepDuration = 1.0 / notesPerBar;
+            let previousNote = barIdx > 0 && this.channel2Notes[barIdx - 1].length > 0 ? 
+                this.channel2Notes[barIdx - 1][this.channel2Notes[barIdx - 1].length - 1].midi : null;
+            
+            const nextChordTonesObj = barIdx < barsToGenerate - 1 ? 
+                this.getChordTonesForBar(this.progression[barIdx + 1]) : null;
+            const nextChordTones = nextChordTonesObj ? nextChordTonesObj.midiNotes : null;
+            
+            // Arpeggio mode
+            let arpIndex = 0;
+            const sortedChordTones = [...chordTones].sort((a, b) => a - b);
+            
+            for (let i = 0; i < notesPerBar; i++) {
+                // Random rests feature
+                if (this.generativeFeatures.rests && Math.random() < 0.3) {
+                    continue;
+                }
+                
+                // Skip intervals feature
+                if (this.generativeFeatures.intervals && i % 3 === 1) {
+                    continue;
+                }
+                
+                let midi;
+                
+                // Arpeggio modes
+                if (this.generativeFeatures.arp_up) {
+                    midi = sortedChordTones[arpIndex % sortedChordTones.length];
+                    arpIndex++;
+                } else if (this.generativeFeatures.arp_down) {
+                    midi = sortedChordTones[sortedChordTones.length - 1 - (arpIndex % sortedChordTones.length)];
+                    arpIndex++;
+                } else {
+                    // Random note from chord
+                    midi = chordTones[Math.floor(Math.random() * chordTones.length)];
+                }
+                
+                if (midi) {
+                    // Apply octave shift
+                    midi += (this.generativeParams.octaveShift * 12);
+                    
+                    // Calculate note start position (relative to bar)
+                    let noteStart = i * stepDuration;
+                    
+                    // Swing timing feature
+                    if (this.generativeFeatures.swing && i % 2 === 1) {
+                        noteStart += stepDuration * 0.15;
+                    }
+                    
+                    // Apply syncopation
+                    if (this.generativeParams.syncopation > 0 && Math.random() * 100 < this.generativeParams.syncopation) {
+                        noteStart += stepDuration * 0.25;
+                    }
+                    
+                    // Note length
+                    let noteDuration = this.generativeParams.noteLength;
+                    
+                    // Velocity variation feature
+                    let velocity = 85;
+                    if (this.generativeFeatures.velocity) {
+                        velocity = Math.floor(Math.random() * 40) + 60;
+                    }
+                    
+                    previousNote = midi;
+                    this.channel2Notes[barIdx].push({
+                        midi: midi,
+                        start: noteStart,
+                        duration: noteDuration,
+                        velocity: velocity
+                    });
+                    
+                    // Chord stacks feature
+                    if (this.generativeFeatures.chords && Math.random() < 0.4) {
+                        const intervals = [3, 4, 7];
+                        const interval = intervals[Math.floor(Math.random() * intervals.length)];
+                        this.channel2Notes[barIdx].push({
+                            midi: midi + interval,
+                            start: noteStart,
+                            duration: noteDuration,
+                            velocity: velocity - 10
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    randomizeGenerativeParams() {
+        this.generativeParams.stepwise = Math.floor(Math.random() * 60) + 40; // 40-100
+        this.generativeParams.density = Math.floor(Math.random() * 29) + 2; // 2-30
+        this.generativeParams.randomness = Math.floor(Math.random() * 50) + 10; // 10-60
+        this.generativeParams.noteLength = (Math.random() * 3.5) + 0.2; // 0.2-3.7 bars
+        this.generativeParams.syncopation = Math.floor(Math.random() * 60); // 0-60
+        this.generativeParams.octaveShift = Math.floor(Math.random() * 5) - 2; // -2 to 2
+        
+        // Update UI
+        document.getElementById('stepwiseMotion').value = this.generativeParams.stepwise;
+        document.getElementById('stepwiseValue').textContent = this.generativeParams.stepwise + '%';
+        document.getElementById('generativeDensity').value = this.generativeParams.density;
+        document.getElementById('densityValue').textContent = this.generativeParams.density;
+        document.getElementById('randomness').value = this.generativeParams.randomness;
+        document.getElementById('randomnessValue').textContent = this.generativeParams.randomness + '%';
+        document.getElementById('noteLength').value = this.generativeParams.noteLength.toFixed(1);
+        document.getElementById('noteLengthValue').textContent = this.generativeParams.noteLength.toFixed(1) + ' bars';
+        document.getElementById('syncopation').value = this.generativeParams.syncopation;
+        document.getElementById('syncopationValue').textContent = this.generativeParams.syncopation + '%';
+        document.getElementById('octaveShift').value = this.generativeParams.octaveShift;
+        document.getElementById('octaveShiftValue').textContent = this.generativeParams.octaveShift;
+        
+        // Auto-preview
+        this.previewGenerative();
     }
     
     openPresetMenu() {
@@ -2785,6 +3797,12 @@ class ChordProgressionApp {
 
     generateFromPreset(maxBars = null) {
         const preset = this.channel2CurrentPreset;
+        
+        // Check if this is a multi-bar pattern preset
+        if (preset.multiBarPattern) {
+            return this.generateMultiBarPattern(maxBars);
+        }
+        
         const notesPerBar = preset.noteDensity[this.channel2Density] || 4;
         
         console.log(`🎹 generateFromPreset called:`);
@@ -2795,6 +3813,9 @@ class ChordProgressionApp {
         
         const barsToGenerate = maxBars ? Math.min(maxBars, this.progression.length) : this.progression.length;
         console.log(`  - Will generate: ${barsToGenerate} bars`);
+        
+        // Clear existing notes first!
+        this.channel2Notes = {};
         
         for (let barIndex = 0; barIndex < barsToGenerate; barIndex++) {
             const bar = this.progression[barIndex];
@@ -2807,25 +3828,111 @@ class ChordProgressionApp {
             // Apply voicing template to create notes
             const voicedNotes = this.applyVoicingTemplate(chordTones, preset.voicingTemplate);
             
-            // Generate rhythm based on preset
-            const stepDuration = 1.0 / notesPerBar;
-            
-            for (let i = 0; i < notesPerBar; i++) {
-                const noteIndex = i % voicedNotes.length;
-                const midi = voicedNotes[noteIndex];
+            // Check if preset uses generative algorithm
+            if (preset.generative && preset.generativeType === 'melody') {
+                // Use generative melody algorithm
+                const notesPerBar = preset.noteDensity[this.channel2Density] || 8;
+                const stepDuration = 1.0 / notesPerBar;
+                let previousNote = null;
                 
-                // Apply timing offset from preset
-                const timingOffset = preset.timingOffsets && preset.timingOffsets[i % preset.timingOffsets.length] || 0;
+                const nextChordTones = barIndex < barsToGenerate - 1 ? 
+                    this.getChordTonesForBar(this.progression[barIndex + 1]) : null;
                 
-                // Apply velocity from preset
-                const velocity = preset.velocityProfile && preset.velocityProfile[i % preset.velocityProfile.length] || 80;
+                for (let i = 0; i < notesPerBar; i++) {
+                    const position = i === 0 ? 0 : (i === notesPerBar - 1 ? 'end' : i);
+                    const midi = this.generateMelody(chordTones, previousNote, nextChordTones, position);
+                    previousNote = midi;
+                    
+                    const velocity = preset.velocityProfile[i % preset.velocityProfile.length] || 85;
+                    
+                    this.channel2Notes[barIndex].push({
+                        midi: midi,
+                        start: i * stepDuration,
+                        duration: stepDuration * preset.legato,
+                        velocity: velocity
+                    });
+                }
+            } else if (preset.generative && preset.walkingBass) {
+                // Use generative walking bass algorithm
+                const nextChordTones = barIndex < barsToGenerate - 1 ? 
+                    this.getChordTonesForBar(this.progression[barIndex + 1]) : null;
                 
-                this.channel2Notes[barIndex].push({
-                    midi: midi,
-                    start: (i * stepDuration) + timingOffset,
-                    duration: stepDuration * (preset.legato || 0.8),
-                    velocity: velocity
+                for (let beat = 0; beat < 4; beat++) {
+                    const midi = this.generateWalkingBass(chordTones, nextChordTones, beat);
+                    const velocity = preset.velocityProfile[beat] || 85;
+                    
+                    this.channel2Notes[barIndex].push({
+                        midi: midi,
+                        start: beat / 4,
+                        duration: 0.22,
+                        velocity: velocity
+                    });
+                }
+            } else if (preset.rhythmPattern && preset.rhythmPattern.length > 0) {
+                // Use defined rhythm pattern (like walking bass, melody phrases)
+                preset.rhythmPattern.forEach((note, idx) => {
+                    let midi;
+                    
+                    // Select note based on noteChoice
+                    switch(note.noteChoice) {
+                        case 'root':
+                            midi = voicedNotes[0];
+                            break;
+                        case 'third':
+                            midi = voicedNotes[Math.min(1, voicedNotes.length - 1)];
+                            break;
+                        case 'fifth':
+                            midi = voicedNotes[Math.min(2, voicedNotes.length - 1)];
+                            break;
+                        case 'seventh':
+                            midi = voicedNotes[Math.min(3, voicedNotes.length - 1)];
+                            break;
+                        case 'approach':
+                            // Chromatic approach to next chord's root
+                            if (barIndex < barsToGenerate - 1) {
+                                const nextBar = this.progression[barIndex + 1];
+                                const nextChordTones = this.getChordTonesForBar(nextBar);
+                                if (nextChordTones) {
+                                    const nextVoiced = this.applyVoicingTemplate(nextChordTones, preset.voicingTemplate);
+                                    midi = nextVoiced[0] - 1; // Half step below next root
+                                } else {
+                                    midi = voicedNotes[0] - 1;
+                                }
+                            } else {
+                                midi = voicedNotes[0] - 1; // Fallback
+                            }
+                            break;
+                        default:
+                            midi = voicedNotes[idx % voicedNotes.length];
+                    }
+                    
+                    const velocity = preset.velocityProfile[idx % preset.velocityProfile.length] || 80;
+                    
+                    this.channel2Notes[barIndex].push({
+                        midi: midi,
+                        start: note.beat / 4,
+                        duration: note.duration,
+                        velocity: velocity
+                    });
                 });
+            } else {
+                // Fallback: simple cycling through notes
+                const stepDuration = 1.0 / notesPerBar;
+                
+                for (let i = 0; i < notesPerBar; i++) {
+                    const noteIndex = i % voicedNotes.length;
+                    const midi = voicedNotes[noteIndex];
+                    
+                    const timingOffset = preset.timingOffsets && preset.timingOffsets[i % preset.timingOffsets.length] || 0;
+                    const velocity = preset.velocityProfile && preset.velocityProfile[i % preset.velocityProfile.length] || 80;
+                    
+                    this.channel2Notes[barIndex].push({
+                        midi: midi,
+                        start: (i * stepDuration) + timingOffset,
+                        duration: stepDuration * (preset.legato || 0.8),
+                        velocity: velocity
+                    });
+                }
             }
         }
         
@@ -2835,8 +3942,89 @@ class ChordProgressionApp {
         this.buildGrid();
     }
     
+    generateMultiBarPattern(maxBars = null) {
+        const preset = this.channel2CurrentPreset;
+        const patternLength = preset.patternLength || 8;
+        const barsToGenerate = maxBars ? Math.min(maxBars, this.progression.length) : this.progression.length;
+        
+        console.log(`🎵 Generating multi-bar pattern (${patternLength} bars)`);
+        
+        // Clear existing notes first!
+        this.channel2Notes = {};
+        
+        // Collect all chord tones for the pattern
+        const allChordTones = [];
+        for (let i = 0; i < Math.min(patternLength, barsToGenerate); i++) {
+            const bar = this.progression[i];
+            const chordTones = this.getChordTonesForBar(bar);
+            allChordTones.push(chordTones);
+        }
+        
+        // Generate continuous pattern across bars
+        const notesPerBar = preset.noteDensity[this.channel2Density] || 16;
+        const totalNotes = notesPerBar * patternLength;
+        const stepDuration = 1.0 / notesPerBar;
+        
+        for (let i = 0; i < totalNotes; i++) {
+            const barIndex = Math.floor(i / notesPerBar);
+            if (barIndex >= barsToGenerate) break;
+            
+            const noteInBar = i % notesPerBar;
+            const chordTones = allChordTones[barIndex];
+            if (!chordTones) continue;
+            
+            if (!this.channel2Notes[barIndex]) {
+                this.channel2Notes[barIndex] = [];
+            }
+            
+            const voicedNotes = this.applyVoicingTemplate(chordTones, preset.voicingTemplate);
+            
+            // Melodic movement logic
+            let noteIndex;
+            if (noteInBar === 0) {
+                noteIndex = 0; // Start with root
+            } else if (noteInBar === notesPerBar - 1) {
+                noteIndex = Math.random() > 0.5 ? 0 : 1; // Resolve
+            } else {
+                noteIndex = Math.floor(Math.random() * voicedNotes.length);
+            }
+            
+            const midi = voicedNotes[noteIndex % voicedNotes.length] + 12; // Octave up for melody
+            
+            // Phrase contour velocity
+            const phrasePosition = i / totalNotes;
+            const velocityIndex = Math.floor(phrasePosition * preset.velocityProfile.length);
+            const velocity = preset.velocityProfile[velocityIndex] || 85;
+            
+            const timingOffset = preset.timingOffsets[i % preset.timingOffsets.length] || 0;
+            
+            this.channel2Notes[barIndex].push({
+                midi: midi,
+                start: (noteInBar * stepDuration) + timingOffset,
+                duration: stepDuration * preset.legato,
+                velocity: velocity
+            });
+        }
+        
+        const totalNotes2 = Object.values(this.channel2Notes).reduce((sum, notes) => sum + notes.length, 0);
+        console.log(`✅ Generated ${totalNotes2} notes in ${patternLength}-bar phrase`);
+        
+        this.buildGrid();
+    }
+    
     getChordTonesForBar(bar) {
-        // Extract MIDI notes from the bar's chords
+        // Priority 1: Get from piano roll (Channel 1 notes) - "Pianoroll is truth"
+        if (bar.notes && bar.notes.length > 0) {
+            const midiNotes = [...new Set(bar.notes.map(n => n.midi))].sort((a, b) => a - b);
+            const pitchClasses = [...new Set(midiNotes.map(m => m % 12))];
+            const avgMidi = midiNotes.reduce((a, b) => a + b, 0) / midiNotes.length;
+            const baseOctave = Math.floor(avgMidi / 12);
+            
+            console.log(`✓ Using piano roll notes for bar: ${midiNotes.join(', ')}`);
+            return { pitchClasses, baseOctave, midiNotes };
+        }
+        
+        // Priority 2: Fallback to chord definitions
         const midiNotes = [];
         bar.chords.forEach(chord => {
             if (chord && chord.midiNotes) {
@@ -2844,16 +4032,21 @@ class ChordProgressionApp {
             }
         });
         
-        if (midiNotes.length === 0) return null;
+        if (midiNotes.length === 0) {
+            console.warn('⚠️ No notes in piano roll or chord definition for bar');
+            return null;
+        }
         
         // Get unique pitch classes
-        const pitchClasses = [...new Set(midiNotes.map(m => m % 12))];
+        const uniqueMidi = [...new Set(midiNotes)].sort((a, b) => a - b);
+        const pitchClasses = [...new Set(uniqueMidi.map(m => m % 12))];
         
         // Find base octave
-        const avgMidi = midiNotes.reduce((a, b) => a + b, 0) / midiNotes.length;
+        const avgMidi = uniqueMidi.reduce((a, b) => a + b, 0) / uniqueMidi.length;
         const baseOctave = Math.floor(avgMidi / 12);
         
-        return { pitchClasses, baseOctave, midiNotes };
+        console.log(`✓ Using chord definition for bar: ${uniqueMidi.join(', ')}`);
+        return { pitchClasses, baseOctave, midiNotes: uniqueMidi };
     }
     
     applyVoicingTemplate(chordTones, template) {
@@ -2932,6 +4125,77 @@ class ChordProgressionApp {
         this.channel2Notes = {};
         this.progressionAnalysis = null;
         this.updateChannel2SyncStatus();
+    }
+    
+    // Generative melody/bass algorithm
+    generateMelody(chordTones, previousNote = null, nextChordTones = null, position = 0) {
+        if (!chordTones || !chordTones.midiNotes || chordTones.midiNotes.length === 0) {
+            return null;
+        }
+        
+        const voicedNotes = this.applyVoicingTemplate(chordTones, ['root', 'third', 'fifth', 'seventh']);
+        
+        if (!voicedNotes || voicedNotes.length === 0) {
+            return null;
+        }
+        
+        // Melodic rules
+        if (position === 0) {
+            // Start phrase: prefer 3rd or 5th
+            const idx = Math.random() > 0.5 ? 1 : 2;
+            return voicedNotes[Math.min(idx, voicedNotes.length - 1)] + 12;
+        } else if (position === 'end') {
+            // End phrase: resolve to root or 3rd
+            const idx = Math.random() > 0.7 ? 0 : 1;
+            return voicedNotes[Math.min(idx, voicedNotes.length - 1)] + 12;
+        } else {
+            // Middle: stepwise motion preferred
+            if (previousNote) {
+                // Find closest note (stepwise motion)
+                const distances = voicedNotes.map(n => Math.abs((n + 12) - previousNote));
+                const closestIdx = distances.indexOf(Math.min(...distances));
+                
+                // 70% chance stepwise, 30% chance leap
+                if (Math.random() > 0.3) {
+                    return voicedNotes[closestIdx] + 12;
+                } else {
+                    // Leap to different chord tone
+                    const leapIdx = (closestIdx + Math.floor(Math.random() * 2) + 1) % voicedNotes.length;
+                    return voicedNotes[leapIdx] + 12;
+                }
+            }
+            // Random chord tone
+            return voicedNotes[Math.floor(Math.random() * voicedNotes.length)] + 12;
+        }
+    }
+    
+    generateWalkingBass(chordTones, nextChordTones = null, beat = 0) {
+        const voicedNotes = this.applyVoicingTemplate(chordTones, ['root_low', 'third_low', 'fifth_low', 'seventh_low']);
+        
+        // Walking bass rules
+        switch(beat) {
+            case 0:
+                // Always start with root
+                return voicedNotes[0];
+            case 1:
+                // 5th or 3rd
+                return Math.random() > 0.6 ? voicedNotes[2] : voicedNotes[1];
+            case 2:
+                // 3rd or 7th
+                return Math.random() > 0.5 ? voicedNotes[1] : voicedNotes[3];
+            case 3:
+                // Approach next chord
+                if (nextChordTones) {
+                    const nextVoiced = this.applyVoicingTemplate(nextChordTones, ['root_low']);
+                    const nextRoot = nextVoiced[0];
+                    // Chromatic approach (half step below)
+                    return nextRoot - 1;
+                }
+                // Fallback: 5th
+                return voicedNotes[2];
+            default:
+                return voicedNotes[beat % voicedNotes.length];
+        }
     }
 
     changeZoom(octaves) {
@@ -7336,8 +8600,26 @@ class ChordProgressionApp {
     }
     
     playChannel2Notes(barIndex, barDuration) {
-        // Don't play if preview is active and mute is enabled
+        // Don't play if generative preview is active
+        if (this.generativePreviewActive) return;
+        
+        // Don't play if preset preview is active
         if (this.channel2PreviewActive) return;
+        
+        // === POC: Check Follow Mode ===
+        if (this.channel2PlaybackMode === 'follow' && this.followMode) {
+            const bar = this.progression[barIndex];
+            if (bar) {
+                const chord = this.getChordTonesForBar(bar);
+                if (chord && chord.midiNotes && chord.midiNotes.length > 0) {
+                    const notes = this.followMode.generateNotes(chord, barDuration);
+                    if (notes && notes.length > 0) {
+                        this.playFollowModeNotes(notes, barDuration);
+                        return; // Skip normal playback
+                    }
+                }
+            }
+        }
         
         const notes = this.channel2Notes[barIndex];
         if (!notes || notes.length === 0) return;
@@ -7381,6 +8663,21 @@ class ChordProgressionApp {
                 }, startTime);
             });
         }
+    }
+
+    // === POC: Helper method for Follow Mode ===
+    playFollowModeNotes(notes, barDuration) {
+        notes.forEach(note => {
+            const startTime = note.start * 1000; // Convert to ms
+            const duration = note.duration;
+            
+            setTimeout(() => {
+                if (this.isPlaying && this.channel2Synth) {
+                    const freq = Tone.Frequency(note.midi, 'midi').toFrequency();
+                    this.channel2Synth.triggerAttackRelease(freq, duration, undefined, note.velocity / 127);
+                }
+            }, startTime);
+        });
     }
 
     playChannel2Arpeggio(midiNotes, duration) {
@@ -8045,4 +9342,64 @@ class ChordProgressionApp {
 let app; // Global reference for inline event handlers
 document.addEventListener('DOMContentLoaded', () => {
     app = new ChordProgressionApp();
+    
+    // Expose UI helpers for Performance Layer
+    window.UI = {
+        getPhraseLength: () => app.styleParams?.phraseLength || 4,
+        getVariation: () => (app.styleParams?.variation || 50) / 100,
+        getOctave: () => app.styleParams?.octave || 0,
+        getSelectedStyleName: () => {
+            const styleId = app.styleParams?.currentStyle || 'pop-basic';
+            const style = app.styles?.[styleId];
+            return style?.name || styleId;
+        }
+    };
+    
+    // Expose adapter interface for Performance Layer
+    window.App = {
+        lengthBars: app.progression?.length || 8,
+        getNotes: () => {
+            // Convert progression to note format for chord detection
+            const notes = [];
+            app.progression.forEach((bar, barIdx) => {
+                if (bar.midiNotes && bar.midiNotes.length > 0) {
+                    bar.midiNotes.forEach(midi => {
+                        notes.push({
+                            pitch: midi,
+                            start: barIdx * 4, // Bar start in beats
+                            end: (barIdx + 1) * 4, // Bar end
+                            vel: 90
+                        });
+                    });
+                }
+            });
+            return notes;
+        },
+        getTempo: () => app.tempo || 120,
+        beatsPerBar: () => 4,
+        scheduleNoteOn: (pitch, vel, time) => {
+            if (app.channel2Synth) {
+                app.channel2Synth.triggerAttack(Tone.Frequency(pitch, 'midi'), time, vel / 127);
+            }
+        },
+        scheduleNoteOff: (pitch, time) => {
+            if (app.channel2Synth) {
+                app.channel2Synth.triggerRelease(Tone.Frequency(pitch, 'midi'), time);
+            }
+        },
+        transportStart: () => {
+            if (Tone.Transport.state !== 'started') {
+                Tone.Transport.start();
+            }
+        },
+        transportStop: () => {
+            if (Tone.Transport.state === 'started') {
+                Tone.Transport.stop();
+            }
+        },
+        killAllVoices: () => {
+            app.channel2Synth?.releaseAll();
+            app.synth?.releaseAll();
+        }
+    };
 });

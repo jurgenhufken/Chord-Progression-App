@@ -604,9 +604,14 @@
                     <details open>
                         <summary style="cursor: pointer; font-weight: bold; margin-bottom: 0.5rem;">🎼 Channel 2 Pattern Generator</summary>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                            <label>
-                                <input type="checkbox" id="channel2PatternEnabled" checked> Enable
-                            </label>
+                            <div style="display: flex; gap: 1rem;">
+                                <label>
+                                    <input type="checkbox" id="channel2PatternEnabled" checked> Enable
+                                </label>
+                                <label>
+                                    <input type="checkbox" id="channel2Mute"> 🔇 Mute
+                                </label>
+                            </div>
                             <span id="channel2SyncStatus" style="font-size: 0.85em; color: #888;">⚠️ Not synced</span>
                         </div>
                         
@@ -615,12 +620,167 @@
                             🎨 Browse Patterns ▼
                         </button>
                         
+                        <!-- Performance Layer Style Generator -->
+                        <details open style="margin-top: 1rem; border: 2px solid #00d4ff; border-radius: 8px; padding: 0; background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);">
+                            <summary style="cursor: pointer; font-weight: bold; color: #00d4ff; padding: 1rem; font-size: 1.1rem; background: rgba(0, 212, 255, 0.1); border-radius: 6px 6px 0 0;">
+                                ✨ Performance Layer
+                            </summary>
+                            <div style="padding: 1rem;">
+                                <!-- Style Cards Grid -->
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="font-size: 0.9rem; color: #00d4ff; font-weight: bold; margin-bottom: 0.5rem; display: block;">🎵 Select Style</label>
+                                    <div id="styleCards" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
+                                        <!-- Pop Basic -->
+                                        <div class="style-card" data-style="pop-basic" style="background: #1a1a2e; border: 2px solid #333; border-radius: 6px; padding: 0.75rem; cursor: pointer; transition: all 0.2s;">
+                                            <div style="font-size: 1.2rem; margin-bottom: 0.25rem;">🎸</div>
+                                            <div style="font-weight: bold; font-size: 0.85rem; color: white;">Pop Basic</div>
+                                            <div style="font-size: 0.7rem; color: #888;">Block chords</div>
+                                        </div>
+                                        <!-- Techno Arp -->
+                                        <div class="style-card" data-style="techno-arp" style="background: #1a1a2e; border: 2px solid #333; border-radius: 6px; padding: 0.75rem; cursor: pointer; transition: all 0.2s;">
+                                            <div style="font-size: 1.2rem; margin-bottom: 0.25rem;">🔊</div>
+                                            <div style="font-weight: bold; font-size: 0.85rem; color: white;">Techno Arp</div>
+                                            <div style="font-size: 0.7rem; color: #888;">16th notes</div>
+                                        </div>
+                                        <!-- Jazz II-V-I -->
+                                        <div class="style-card" data-style="jazz-ii-v-i" style="background: #1a1a2e; border: 2px solid #333; border-radius: 6px; padding: 0.75rem; cursor: pointer; transition: all 0.2s;">
+                                            <div style="font-size: 1.2rem; margin-bottom: 0.25rem;">🎺</div>
+                                            <div style="font-weight: bold; font-size: 0.85rem; color: white;">Jazz Comp</div>
+                                            <div style="font-size: 0.7rem; color: #888;">Swing feel</div>
+                                        </div>
+                                        <!-- Baroque -->
+                                        <div class="style-card" data-style="baroque-cadence" style="background: #1a1a2e; border: 2px solid #333; border-radius: 6px; padding: 0.75rem; cursor: pointer; transition: all 0.2s;">
+                                            <div style="font-size: 1.2rem; margin-bottom: 0.25rem;">🎻</div>
+                                            <div style="font-weight: bold; font-size: 0.85rem; color: white;">Baroque</div>
+                                            <div style="font-size: 0.7rem; color: #888;">Classical</div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Hidden selector for compatibility -->
+                                    <select id="styleSelector" style="display: none;">
+                                        <option value="pop-basic">Pop Basic</option>
+                                        <option value="techno-arp">Techno Arp</option>
+                                        <option value="jazz-ii-v-i">Jazz II-V-I</option>
+                                        <option value="baroque-cadence">Baroque Cadence</option>
+                                    </select>
+                                </div>
+                                
+                                <!-- Current Style Info -->
+                                <div id="styleDescription" style="font-size: 0.85rem; color: #00d4ff; padding: 0.75rem; background: rgba(0, 212, 255, 0.1); border-left: 3px solid #00d4ff; border-radius: 4px; margin-bottom: 1rem;">
+                                    🎸 Pop Basic - Block chord patterns with melodic fills
+                                </div>
+                                
+                                <!-- Parameters -->
+                                <div style="background: rgba(0, 0, 0, 0.3); padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem;">
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                        <!-- Phrase Length -->
+                                        <div>
+                                            <label style="font-size: 0.8rem; color: #888; display: flex; justify-content: space-between;">
+                                                <span>Phrase</span>
+                                                <span id="stylePhraseLength" style="color: #00d4ff; font-weight: bold;">4 bars</span>
+                                            </label>
+                                            <input type="range" id="stylePhraseSlider" min="1" max="16" value="4" style="width: 100%;">
+                                        </div>
+                                        
+                                        <!-- Variation -->
+                                        <div>
+                                            <label style="font-size: 0.8rem; color: #888; display: flex; justify-content: space-between;">
+                                                <span>Variation</span>
+                                                <span id="styleVariation" style="color: #00d4ff; font-weight: bold;">50%</span>
+                                            </label>
+                                            <input type="range" id="styleVariationSlider" min="0" max="100" value="50" style="width: 100%;">
+                                        </div>
+                                        
+                                        <!-- Octave -->
+                                        <div style="grid-column: 1 / -1;">
+                                            <label style="font-size: 0.8rem; color: #888; display: flex; justify-content: space-between;">
+                                                <span>Octave Shift</span>
+                                                <span id="styleOctave" style="color: #00d4ff; font-weight: bold;">0</span>
+                                            </label>
+                                            <input type="range" id="styleOctaveSlider" min="-2" max="2" value="0" step="1" style="width: 100%;">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Live Preview Canvas -->
+                                <div style="position: relative; margin-bottom: 1rem;">
+                                    <div style="font-size: 0.75rem; color: #888; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center;">
+                                        <span>📊 Live Preview</span>
+                                        <span style="color: #00d4ff; font-size: 0.7rem;">Auto-updating</span>
+                                    </div>
+                                    <canvas id="stylePreview" width="300" height="80" style="width: 100%; height: 80px; background: #000; border: 2px solid #00d4ff; border-radius: 6px; box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);"></canvas>
+                                </div>
+                                
+                                <!-- Action Buttons -->
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                    <button id="stylePreviewBtn" class="btn-primary" style="background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%); border: none; font-weight: bold;">
+                                        ▶️ Play
+                                    </button>
+                                    <button id="styleStopBtn" class="btn-primary" style="background: linear-gradient(135deg, #ff6b35 0%, #cc5528 100%); border: none; font-weight: bold;">
+                                        ⏹️ Stop
+                                    </button>
+                                    <button id="styleRandomize" class="btn-primary" style="background: linear-gradient(135deg, #9b59b6 0%, #8e44ad 100%); border: none; font-weight: bold;">
+                                        🎲 Random
+                                    </button>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                                    <button id="styleApplyCurrent" class="btn-primary" style="background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%); border: none; font-weight: bold;">
+                                        ✅ Apply Current
+                                    </button>
+                                    <button id="styleApplyAll" class="btn-primary" style="background: linear-gradient(135deg, #16a085 0%, #138d75 100%); border: none; font-weight: bold;">
+                                        ✅ Apply All
+                                    </button>
+                                </div>
+                            </div>
+                        </details>
+                        
                         <!-- Current Selection Display -->
                         <div style="background: #1a1a1a; padding: 0.75rem; border-radius: 4px; margin-bottom: 0.75rem;">
                             <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.25rem;">Current:</div>
                             <div id="channel2CurrentDisplay" style="font-weight: bold; color: #00d4ff; margin-bottom: 0.5rem;">Manual Mode</div>
                             <div id="channel2CurrentDetails" style="font-size: 0.85rem; color: #888;">
                                 Click Browse to select a pattern
+                            </div>
+                            <div id="channel2MidiSource" style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(0, 255, 0, 0.1); border-left: 3px solid #2ecc71; font-size: 0.85rem; font-weight: bold; color: #2ecc71;">
+                                🎹 MIDI SOURCE: MAIN
+                            </div>
+                        </div>
+                        
+                        <!-- POC: Channel 2 Mode Selector -->
+                        <div style="margin: 1rem 0; padding: 1rem; background: #1a1a1a; border-radius: 4px; border: 2px solid #00d4ff;">
+                            <h4 style="color: #00d4ff; margin-bottom: 0.75rem; font-size: 1rem;">🎛️ Channel 2 Playback Mode</h4>
+                            
+                            <label style="display: block; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(46, 204, 113, 0.05); border-radius: 4px; cursor: pointer;">
+                                <input type="radio" name="ch2mode" value="direct" checked> 
+                                <strong>📝 Direct</strong> - Play piano roll notes
+                            </label>
+                            
+                            <label style="display: block; margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(255, 152, 0, 0.05); border-radius: 4px; cursor: pointer;">
+                                <input type="radio" name="ch2mode" value="follow"> 
+                                <strong>🎵 Follow Master</strong> - Auto-generate patterns
+                            </label>
+                            
+                            <label style="display: block; padding: 0.5rem; background: rgba(156, 39, 176, 0.05); border-radius: 4px; cursor: pointer;">
+                                <input type="radio" name="ch2mode" value="style"> 
+                                <strong>🎨 Style Generator</strong> - Use style presets
+                            </label>
+                            
+                            <div id="channel2ModeIndicator" style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(46, 204, 113, 0.1); border-left: 3px solid #2ecc71; font-weight: bold; color: #2ecc71; font-size: 0.9rem;">
+                                📝 Mode: DIRECT
+                            </div>
+                            
+                            <!-- Follow Mode Controls -->
+                            <div id="followModeControls" style="display: none; margin-top: 0.75rem; padding: 0.75rem; background: rgba(255, 152, 0, 0.05); border-radius: 4px;">
+                                <label style="font-weight: bold; color: #ff9800; font-size: 0.9rem; display: block; margin-bottom: 0.5rem;">Pattern:</label>
+                                <select id="followModePattern" style="width: 100%; padding: 0.5rem; background: #1a1a1a; color: white; border: 1px solid #ff9800; border-radius: 4px;">
+                                    <option value="broken_chord">Broken Chord (C-E-G-C)</option>
+                                    <option value="arpeggio_up">Arpeggio Up</option>
+                                    <option value="arpeggio_down">Arpeggio Down</option>
+                                    <option value="alberti">Alberti Bass</option>
+                                    <option value="block">Block Chord</option>
+                                    <option value="waltz">Waltz Bass</option>
+                                </select>
                             </div>
                         </div>
                         
@@ -1094,6 +1254,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://unpkg.com/midi-writer-js@2.1.4/build/index.js"></script>
     <script src="chord_analyzer.js"></script>
+    
+    <!-- POC Modules (Load BEFORE app.js) -->
+    <script src="chord-detector-improved.js"></script>
+    <script src="channel2-follow-mode.js"></script>
+    <script src="mode-switcher.js"></script>
+    
     <script src="app.js"></script>
+    
+    <!-- Performance Layer Integration -->
+    <script type="module" src="./extensions/scaler_integration/ui/actions.js"></script>
 </body>
 </html>
