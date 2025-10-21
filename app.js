@@ -10,6 +10,9 @@ class ChordProgressionApp {
         this.bpm = 120;
         this.loopEnabled = true; // Default ON
         this.loopSliderTotalWidth = 0;
+        this.loopSliderScrollLinked = false;
+        this.syncingSliderScroll = false;
+        this.syncingGridScroll = false;
         
         // Modulation system
         this.modulation = {
@@ -367,53 +370,95 @@ class ChordProgressionApp {
         const range = document.getElementById('loopSliderRange');
         const handleStart = document.getElementById('loopHandleStart');
         const handleEnd = document.getElementById('loopHandleEnd');
+        const container = track ? track.parentElement : null;
+        const gridWrapper = document.querySelector('.grid-wrapper');
 
-        if (!track || !range) return;
+        if (!track || !range || !container) return;
 
         let dragging = null;
 
         const getBarWidth = () => {
             if (this.barWidth && this.barWidth > 0) return this.barWidth;
             const cssWidth = getComputedStyle(document.documentElement).getPropertyValue('--bar-width');
-            const parsed = parseInt(cssWidth, 10);
-            return Number.isNaN(parsed) ? 140 : parsed;
+            const parsed = parseFloat(cssWidth);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : 140;
         };
 
-        const getLabelWidth = () => {
-            const cssWidth = getComputedStyle(document.documentElement).getPropertyValue('--label-width');
-            const parsed = parseInt(cssWidth, 10);
-            return Number.isNaN(parsed) ? 80 : parsed;
+        const clampLoopBounds = (totalBars) => {
+            if (totalBars <= 0) return;
+
+            const rawStart = Number.isFinite(this.loopStart) ? Math.floor(this.loopStart) : 1;
+            const rawEnd = Number.isFinite(this.loopEnd) ? Math.floor(this.loopEnd) : rawStart;
+            const desiredLength = Math.max(1, rawEnd - rawStart + 1);
+
+            let start = Math.max(1, Math.min(rawStart, totalBars));
+            let end = Math.max(start, Math.min(rawEnd, totalBars));
+
+            const maxStart = Math.max(1, totalBars - desiredLength + 1);
+            if (start > maxStart) {
+                start = maxStart;
+                end = Math.min(totalBars, start + desiredLength - 1);
+            } else {
+                const actualLength = end - start + 1;
+                if (actualLength < desiredLength) {
+                    end = Math.min(totalBars, start + desiredLength - 1);
+                }
+            }
+
+            this.loopStart = start;
+            this.loopEnd = end;
+        };
+
+        const autoScrollWhileDragging = (clientX) => {
+            if (!dragging || !container) return;
+            const parentRect = container.getBoundingClientRect();
+            const threshold = 32;
+            if (clientX > parentRect.right - threshold) {
+                const delta = container.clientWidth * 0.15;
+                container.scrollLeft = Math.min(container.scrollWidth - container.clientWidth, container.scrollLeft + delta);
+            } else if (clientX < parentRect.left + threshold) {
+                const delta = container.clientWidth * 0.15;
+                container.scrollLeft = Math.max(0, container.scrollLeft - delta);
+            }
         };
 
         const updateSlider = () => {
-            const totalBars = this.progression.length;
+            const totalBars = this.progression.length || 0;
+
             if (totalBars === 0) {
                 this.loopSliderTotalWidth = 0;
+                range.style.left = '0px';
+                range.style.width = '0px';
+                track.style.width = '0px';
+                track.style.minWidth = '0px';
+                const labels = document.getElementById('loopSliderLabels');
+                if (labels) {
+                    labels.innerHTML = '';
+                    labels.style.width = '0px';
+                    labels.style.minWidth = '0px';
+                }
                 return;
             }
 
+            clampLoopBounds(totalBars);
+
             const barWidth = getBarWidth();
-            const gridWidth = totalBars * barWidth;
+            const gridWidth = Math.max(barWidth, totalBars * barWidth);
             this.loopSliderTotalWidth = gridWidth;
 
-            const labelWidth = getLabelWidth();
-            const parentWidth = track.parentElement ? Math.max(track.parentElement.clientWidth - labelWidth, 0) : gridWidth;
-            const effectiveWidth = Math.max(gridWidth, parentWidth);
+            track.style.width = gridWidth + 'px';
+            track.style.minWidth = gridWidth + 'px';
 
-            track.style.width = effectiveWidth + 'px';
-            track.style.minWidth = effectiveWidth + 'px';
-
-            const startPos = Math.max(0, (this.loopStart - 1) * barWidth);
-            const endPos = Math.max(startPos + barWidth, this.loopEnd * barWidth);
-
+            const barsSelected = Math.max(1, this.loopEnd - this.loopStart + 1);
+            const startPos = (this.loopStart - 1) * barWidth;
             range.style.left = startPos + 'px';
-            range.style.width = (endPos - startPos) + 'px';
+            range.style.width = (barsSelected * barWidth) + 'px';
 
             const labels = document.getElementById('loopSliderLabels');
             if (labels) {
                 labels.innerHTML = '';
-                labels.style.width = effectiveWidth + 'px';
-                labels.style.minWidth = effectiveWidth + 'px';
+                labels.style.width = gridWidth + 'px';
+                labels.style.minWidth = gridWidth + 'px';
                 for (let i = 1; i <= totalBars; i++) {
                     const label = document.createElement('span');
                     label.textContent = i;
@@ -429,6 +474,17 @@ class ChordProgressionApp {
             this.suppressLoopSliderUpdate = true;
             this.buildGrid();
             this.suppressLoopSliderUpdate = false;
+
+            if (gridWrapper && !this.syncingSliderScroll) {
+                const targetScroll = gridWrapper.scrollLeft;
+                if (Math.abs(container.scrollLeft - targetScroll) > 1) {
+                    this.syncingGridScroll = true;
+                    container.scrollLeft = targetScroll;
+                    requestAnimationFrame(() => {
+                        this.syncingGridScroll = false;
+                    });
+                }
+            }
         };
 
         const beginDrag = (type, startX) => {
@@ -462,15 +518,18 @@ class ChordProgressionApp {
         const handlePointerMove = (clientX) => {
             if (!dragging) return;
 
+            autoScrollWhileDragging(clientX);
+
             const barWidth = getBarWidth();
             if (barWidth <= 0) return;
 
             const totalBars = this.progression.length;
-            if (totalBars === 0) return;
+            if (!totalBars) return;
 
             const trackRect = track.getBoundingClientRect();
             const totalWidth = this.loopSliderTotalWidth || (totalBars * barWidth);
-            const relativeX = Math.max(0, Math.min(clientX - trackRect.left, totalWidth));
+            const scrollOffset = container ? container.scrollLeft : 0;
+            const relativeX = Math.max(0, Math.min(clientX - trackRect.left + scrollOffset, totalWidth));
 
             if (dragging === 'start') {
                 const barIndex = Math.floor(relativeX / barWidth);
@@ -526,6 +585,32 @@ class ChordProgressionApp {
         document.addEventListener('mouseup', stopDrag);
         document.addEventListener('touchend', stopDrag);
         document.addEventListener('touchcancel', stopDrag);
+
+        if (container && gridWrapper && !this.loopSliderScrollLinked) {
+            container.addEventListener('scroll', () => {
+                if (this.syncingGridScroll) return;
+                this.syncingSliderScroll = true;
+                if (gridWrapper.scrollLeft !== container.scrollLeft) {
+                    gridWrapper.scrollLeft = container.scrollLeft;
+                }
+                requestAnimationFrame(() => {
+                    this.syncingSliderScroll = false;
+                });
+            });
+
+            gridWrapper.addEventListener('scroll', () => {
+                if (this.syncingSliderScroll) return;
+                this.syncingGridScroll = true;
+                if (container.scrollLeft !== gridWrapper.scrollLeft) {
+                    container.scrollLeft = gridWrapper.scrollLeft;
+                }
+                requestAnimationFrame(() => {
+                    this.syncingGridScroll = false;
+                });
+            });
+
+            this.loopSliderScrollLinked = true;
+        }
 
         updateSlider();
 
