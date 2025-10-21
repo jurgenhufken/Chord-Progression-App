@@ -9,6 +9,7 @@ class ChordProgressionApp {
         this.currentBar = 0;
         this.bpm = 120;
         this.loopEnabled = true; // Default ON
+        this.suppressLoopSliderUpdate = false;
         
         // Modulation system
         this.modulation = {
@@ -86,7 +87,7 @@ class ChordProgressionApp {
         
         // View settings
         this.showPianoRoll = true;
-        this.showChannel2 = true; // Channel 2 ON by default
+        this.showChannel2 = false; // Channel 2 OFF by default
         this.channel2Mode = 'separate'; // 'overlay' or 'separate' - separate by default
         this.pianoRange = 'auto'; // 'auto' or 'full'
         
@@ -111,6 +112,7 @@ class ChordProgressionApp {
         this.notePreviewEnabled = true;
         this.loopStart = 1;
         this.loopEnd = 4;
+        this.maxLoopBars = 8;
         
         // Edit mode state
         this.editMode = false;
@@ -153,14 +155,16 @@ class ChordProgressionApp {
         const ch2Btn = document.getElementById('toggleChannel2');
         const ch2ModeBtn = document.getElementById('toggleChannel2Mode');
         if (ch2Btn) {
-            ch2Btn.textContent = '🎶 Channel 2 ON';
-            ch2Btn.classList.add('active');
+            ch2Btn.textContent = '🎶 Channel 2';
+            ch2Btn.classList.remove('active');
         }
         if (ch2ModeBtn) {
-            ch2ModeBtn.style.display = 'inline-block';
+            ch2ModeBtn.style.display = 'none';
             ch2ModeBtn.textContent = '📊 Separate';
-            ch2ModeBtn.classList.add('active');
+            ch2ModeBtn.classList.remove('active');
         }
+
+        this.updateChannel2SyncStatus();
         
         // Set loop button active by default
         const loopBtn = document.getElementById('loopBtn');
@@ -203,6 +207,8 @@ class ChordProgressionApp {
                     this.generateChannel2Pattern();
                     // Rebuild grid to show Channel 2 notes
                     this.buildGrid();
+                } else {
+                    this.updateChannel2SyncStatus();
                 }
                 
                 // Initialize loop slider AFTER progression is loaded
@@ -362,119 +368,205 @@ class ChordProgressionApp {
         const range = document.getElementById('loopSliderRange');
         const handleStart = document.getElementById('loopHandleStart');
         const handleEnd = document.getElementById('loopHandleEnd');
-        
+        const labelsContainer = document.getElementById('loopSliderLabels');
+
         if (!track || !range) return;
-        
+
         let dragging = null;
-        
+
+        const MAX_LOOP_BARS = Math.max(1, this.maxLoopBars || 8);
+
+        const getBarWidth = () => {
+            if (this.barWidth && this.barWidth > 0) return this.barWidth;
+            const cssWidth = getComputedStyle(document.documentElement).getPropertyValue('--bar-width');
+            const parsed = parseFloat(cssWidth);
+            return Number.isFinite(parsed) && parsed > 0 ? parsed : 140;
+        };
+
+        const clampLoopBounds = (totalBars) => {
+            if (totalBars <= 0) return;
+
+            let start = Number.isFinite(this.loopStart) ? Math.floor(this.loopStart) : 1;
+            let end = Number.isFinite(this.loopEnd) ? Math.floor(this.loopEnd) : start;
+
+            if (start < 1) start = 1;
+            if (end < start) end = start;
+            if (end > totalBars) end = totalBars;
+
+            const maxLength = Math.min(MAX_LOOP_BARS, totalBars);
+            if (end - start + 1 > maxLength) {
+                end = start + maxLength - 1;
+            }
+
+            if (end > totalBars) {
+                end = totalBars;
+                start = Math.max(1, end - maxLength + 1);
+            }
+
+            this.loopStart = start;
+            this.loopEnd = end;
+        };
+
         const updateSlider = () => {
-            const totalBars = this.progression.length;
-            if (totalBars === 0) return;
-            
-            // Use dynamic bar width
-            const barWidth = this.barWidth || 140;
-            const labelWidth = 0; // Track already has margin-left in CSS
-            const gridWidth = (totalBars * barWidth);
+            const totalBars = this.progression.length || 0;
+
+            if (totalBars === 0) {
+                range.style.left = '0px';
+                range.style.width = '0px';
+                track.style.width = '0px';
+                track.style.minWidth = '0px';
+                if (labelsContainer) {
+                    labelsContainer.innerHTML = '';
+                    labelsContainer.style.width = '0px';
+                    labelsContainer.style.minWidth = '0px';
+                }
+                return;
+            }
+
+            clampLoopBounds(totalBars);
+
+            const barWidth = getBarWidth();
+            const gridWidth = Math.max(barWidth, totalBars * barWidth);
+
             track.style.width = gridWidth + 'px';
-            
-            const startPos = ((this.loopStart - 1) * barWidth);
-            const endPos = (this.loopEnd * barWidth);
-            
+            track.style.minWidth = gridWidth + 'px';
+
+            const barsSelected = Math.max(1, this.loopEnd - this.loopStart + 1);
+            const startPos = (this.loopStart - 1) * barWidth;
+
             range.style.left = startPos + 'px';
-            range.style.width = (endPos - startPos) + 'px';
-            
-            // Update labels
-            const labels = document.getElementById('loopSliderLabels');
-            if (labels) {
-                labels.innerHTML = '';
-                labels.style.width = gridWidth + 'px';
+            range.style.width = (barsSelected * barWidth) + 'px';
+
+            if (labelsContainer) {
+                labelsContainer.innerHTML = '';
+                labelsContainer.style.width = gridWidth + 'px';
+                labelsContainer.style.minWidth = gridWidth + 'px';
                 for (let i = 1; i <= totalBars; i++) {
                     const label = document.createElement('span');
                     label.textContent = i;
-                    labels.appendChild(label);
+                    labelsContainer.appendChild(label);
                 }
             }
-            
-            // Update input fields
-            document.getElementById('loopStart').value = this.loopStart;
-            document.getElementById('loopEnd').value = this.loopEnd;
-            
-            // Rebuild grid to show highlights
+
+            const loopStartInput = document.getElementById('loopStart');
+            const loopEndInput = document.getElementById('loopEnd');
+            if (loopStartInput) loopStartInput.value = this.loopStart;
+            if (loopEndInput) loopEndInput.value = this.loopEnd;
+
+            this.suppressLoopSliderUpdate = true;
             this.buildGrid();
+            this.suppressLoopSliderUpdate = false;
         };
-        
-        handleStart.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            dragging = 'start';
-        });
-        
-        handleEnd.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            dragging = 'end';
-        });
-        
-        range.addEventListener('mousedown', (e) => {
-            if (e.target === range || e.target.classList.contains('loop-slider-range')) {
+
+        const beginDrag = (type, startX) => {
+            dragging = type;
+            this.dragStartX = startX;
+            this.dragStartLoopStart = this.loopStart;
+            this.dragStartLoopEnd = this.loopEnd;
+        };
+
+        const attachPointerStart = (element, type) => {
+            if (!element) return;
+
+            element.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                dragging = 'range';
-                this.dragStartX = e.clientX;
-                this.dragStartLoopStart = this.loopStart;
-                this.dragStartLoopEnd = this.loopEnd;
-            }
-        });
-        
-        document.addEventListener('mousemove', (e) => {
+                e.stopPropagation();
+                beginDrag(type, e.clientX);
+            });
+
+            element.addEventListener('touchstart', (e) => {
+                if (e.touches.length !== 1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                beginDrag(type, e.touches[0].clientX);
+            }, { passive: false });
+        };
+
+        attachPointerStart(handleStart, 'start');
+        attachPointerStart(handleEnd, 'end');
+        attachPointerStart(range, 'range');
+
+        const handlePointerMove = (clientX) => {
             if (!dragging) return;
-            e.preventDefault();
-            
-            const barWidth = this.barWidth || 140;
-            const labelWidth = 80;
-            const gridContainer = document.getElementById('gridContainer');
-            if (!gridContainer) return;
-            
-            const gridRect = gridContainer.getBoundingClientRect();
-            const mouseX = e.clientX - gridRect.left;
-            
+
+            const barWidth = getBarWidth();
+            if (barWidth <= 0) return;
+
+            const totalBars = this.progression.length || 0;
+            if (!totalBars) return;
+
+            if (dragging === 'range') {
+                const deltaX = clientX - this.dragStartX;
+                const deltaBars = Math.round(deltaX / barWidth);
+                if (deltaBars !== 0) {
+                    let rangeSize = Math.max(0, this.dragStartLoopEnd - this.dragStartLoopStart);
+                    rangeSize = Math.min(rangeSize, MAX_LOOP_BARS - 1);
+                    const maxStart = Math.max(1, totalBars - rangeSize);
+                    const desiredStart = this.dragStartLoopStart + deltaBars;
+                    const newStart = Math.max(1, Math.min(maxStart, desiredStart));
+                    const newEnd = Math.min(totalBars, newStart + rangeSize);
+                    if (newStart !== this.loopStart || newEnd !== this.loopEnd) {
+                        this.loopStart = newStart;
+                        this.loopEnd = newEnd;
+                        updateSlider();
+                    }
+                }
+                return;
+            }
+
+            const rect = track.getBoundingClientRect();
+            const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+            const barIndex = Math.floor(relativeX / barWidth);
+
             if (dragging === 'start') {
-                // Calculate which bar we're over
-                const barIndex = Math.floor((mouseX - labelWidth) / barWidth);
-                const newStart = Math.max(1, Math.min(this.loopEnd, barIndex + 1));
+                const minStart = Math.max(1, this.loopEnd - MAX_LOOP_BARS + 1);
+                const newStart = Math.max(minStart, Math.min(this.loopEnd, barIndex + 1));
                 if (newStart !== this.loopStart) {
                     this.loopStart = newStart;
                     updateSlider();
                 }
             } else if (dragging === 'end') {
-                // Calculate which bar we're over
-                const barIndex = Math.floor((mouseX - labelWidth) / barWidth);
-                const newEnd = Math.max(this.loopStart, Math.min(this.progression.length, barIndex + 1));
+                const maxEnd = Math.min(totalBars, this.loopStart + MAX_LOOP_BARS - 1);
+                const newEnd = Math.max(this.loopStart, Math.min(maxEnd, barIndex + 1));
                 if (newEnd !== this.loopEnd) {
                     this.loopEnd = newEnd;
                     updateSlider();
                 }
-            } else if (dragging === 'range') {
-                const deltaX = e.clientX - this.dragStartX;
-                const deltaBars = Math.round(deltaX / barWidth);
-                if (deltaBars !== 0) {
-                    const rangeSize = this.dragStartLoopEnd - this.dragStartLoopStart;
-                    const newStart = Math.max(1, Math.min(this.progression.length - rangeSize, this.dragStartLoopStart + deltaBars));
-                    this.loopStart = newStart;
-                    this.loopEnd = newStart + rangeSize;
-                    updateSlider();
-                }
             }
-        });
-        
-        document.addEventListener('mouseup', () => {
+        };
+
+        const stopDrag = () => {
             dragging = null;
+        };
+
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            e.preventDefault();
+            handlePointerMove(e.clientX);
         });
-        
-        // Initial update
+
+        document.addEventListener('touchmove', (e) => {
+            if (!dragging || e.touches.length === 0) return;
+            e.preventDefault();
+            handlePointerMove(e.touches[0].clientX);
+        }, { passive: false });
+
+        document.addEventListener('mouseup', stopDrag);
+        document.addEventListener('touchend', stopDrag);
+        document.addEventListener('touchcancel', stopDrag);
+
         updateSlider();
-        
-        // Store update function for later use
+
         this.updateLoopSlider = updateSlider;
+
+        if (!this.loopSliderResizeHandler) {
+            this.loopSliderResizeHandler = () => {
+                if (this.updateLoopSlider) {
+                    this.updateLoopSlider();
+                }
+            };
+            window.addEventListener('resize', this.loopSliderResizeHandler);
+        }
     }
 
     buildVerticalRuler() {
@@ -1289,14 +1381,27 @@ class ChordProgressionApp {
         // Loop range
         document.getElementById('loopStart')?.addEventListener('change', (e) => {
             this.loopStart = Math.max(1, parseInt(e.target.value));
+            if (Number.isNaN(this.loopStart)) this.loopStart = 1;
             // Ensure end is not before start
             if (this.loopEnd < this.loopStart) {
                 this.loopEnd = this.loopStart;
-                document.getElementById('loopEnd').value = this.loopEnd;
+                const loopEndInput = document.getElementById('loopEnd');
+                if (loopEndInput) loopEndInput.value = this.loopEnd;
             }
+            const maxLength = (this.maxLoopBars || 8) - 1;
+            if (this.loopEnd - this.loopStart > maxLength) {
+                this.loopEnd = this.loopStart + maxLength;
+            }
+            if (this.updateLoopSlider) this.updateLoopSlider();
         });
         document.getElementById('loopEnd')?.addEventListener('change', (e) => {
             this.loopEnd = Math.max(this.loopStart, parseInt(e.target.value));
+            if (Number.isNaN(this.loopEnd)) this.loopEnd = this.loopStart;
+            const maxEnd = this.loopStart + (this.maxLoopBars || 8) - 1;
+            if (this.loopEnd > maxEnd) {
+                this.loopEnd = Math.min(maxEnd, this.progression.length || this.loopEnd);
+            }
+            if (this.updateLoopSlider) this.updateLoopSlider();
         });
         
         // Arpeggiator
@@ -1619,17 +1724,21 @@ class ChordProgressionApp {
         this.showChannel2 = !this.showChannel2;
         const btn = document.getElementById('toggleChannel2');
         const modeBtn = document.getElementById('toggleChannel2Mode');
-        
+
         if (btn) {
             btn.textContent = this.showChannel2 ? '🎶 Channel 2 ON' : '🎶 Channel 2';
             btn.classList.toggle('active', this.showChannel2);
         }
-        
+
         // Show/hide mode toggle button
         if (modeBtn) {
             modeBtn.style.display = this.showChannel2 ? 'inline-block' : 'none';
+            modeBtn.classList.toggle('active', this.showChannel2 && this.channel2Mode === 'separate');
+            if (this.showChannel2) {
+                modeBtn.textContent = this.channel2Mode === 'separate' ? '📊 Separate' : '🔗 Overlay';
+            }
         }
-        
+
         if (this.showChannel2) {
             console.log('Channel 2 activated! 🎵');
             this.generateChannel2Pattern();
@@ -1656,9 +1765,15 @@ class ChordProgressionApp {
     updateChannel2SyncStatus() {
         const statusEl = document.getElementById('channel2SyncStatus');
         if (!statusEl) return;
-        
+
+        if (!this.showChannel2) {
+            statusEl.textContent = '🚫 Channel 2 uit';
+            statusEl.style.color = '#888';
+            return;
+        }
+
         const progressionBars = this.progression.length;
-        
+
         // Count only bars with actual notes
         const barsWithNotes = Object.keys(this.channel2Notes).filter(barIdx => {
             const notes = this.channel2Notes[barIdx];
@@ -4306,7 +4421,7 @@ class ChordProgressionApp {
         this.buildGrid();
         this.buildDrumGrid();
         this.analyzeProgression();
-        if (this.updateLoopSlider) this.updateLoopSlider();
+        if (this.updateLoopSlider && !this.suppressLoopSliderUpdate) this.updateLoopSlider();
         
         console.log(`Parsed ${allBars.length} bars into ${patternIndex} patterns`);
         console.log('Pattern A1 bars:', this.patterns['A1'] ? this.patterns['A1'].progression.map(b => b.barNum) : 'empty');
@@ -4363,21 +4478,24 @@ class ChordProgressionApp {
         container.innerHTML = '';
         
         const numBars = Math.max(this.progression.length, 1);
-        
-        // Calculate bar width so 8 bars fill the screen
+
+        // Calculate bar width so 8 bars fill the screen while adapting on small viewports
         const gridWrapper = document.querySelector('.grid-wrapper');
-        const availableWidth = gridWrapper ? gridWrapper.clientWidth - 80 : 1120; // Subtract label width
-        this.barWidth = Math.max(100, Math.floor(availableWidth / 8)); // Min 100px per bar
-        
+        const wrapperWidth = gridWrapper ? gridWrapper.clientWidth : 0;
+        const availableWidth = Math.max(wrapperWidth - 80, 0); // Subtract label width safely
+        const computedBarWidth = availableWidth > 0 ? Math.floor(availableWidth / 8) : 140;
+        this.barWidth = Math.max(60, computedBarWidth); // Ensure bars remain visible even on very small screens
+
         // Update CSS variable
         document.documentElement.style.setProperty('--bar-width', `${this.barWidth}px`);
-        
+
         // Enable scroll only in song mode with >8 bars
         if (gridWrapper) {
-            // In pattern mode, always show max 8 bars, no scroll
             const shouldScroll = this.songMode && numBars > 8;
-            gridWrapper.style.overflowX = shouldScroll ? 'auto' : 'hidden';
-            
+            const totalGridWidth = 80 + (this.barWidth * numBars);
+            const needsScroll = totalGridWidth > wrapperWidth;
+            gridWrapper.style.overflowX = (shouldScroll || needsScroll) ? 'auto' : 'hidden';
+
             // Link scroll with drum sequencer
             if (!this.scrollListenerAdded) {
                 gridWrapper.addEventListener('scroll', () => {
