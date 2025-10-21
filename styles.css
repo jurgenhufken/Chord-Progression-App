@@ -8,8 +8,9 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: #1a1a1a;
     color: #fff;
-    height: 100vh;
-    overflow: hidden;
+    min-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .app-container {
@@ -250,6 +251,8 @@ input[type="range"] {
     background: transparent;
     padding: 0.5rem 0;
     margin-bottom: 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .loop-slider-track {
@@ -257,6 +260,7 @@ input[type="range"] {
     background: transparent;
     position: relative;
     width: fit-content;
+    min-width: 100%;
     border-top: 1px solid #333;
     margin-left: var(--label-width);
 }
@@ -1966,4 +1970,99 @@ input[type="range"] {
 .effect-routing-control input[type="range"] {
     flex: 1;
     margin: 0 0.5rem;
+}
+
+/* Responsive layout adjustments */
+@media (max-width: 1280px) {
+    .header > div {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .toolbar {
+        flex-wrap: wrap;
+    }
+
+    .transport {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 1024px) {
+    .main-content {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .sidebar .section {
+        flex: 1 1 280px;
+    }
+
+    .grid-area {
+        order: -1;
+        min-height: 0;
+    }
+
+    .grid-wrapper {
+        min-height: 420px;
+    }
+}
+
+@media (max-width: 768px) {
+    :root {
+        --label-width: 60px;
+        --chord-header-height: 100px;
+    }
+
+    .btn-play, .btn-stop, .btn-loop {
+        width: 42px;
+        height: 42px;
+        font-size: 1.25rem;
+    }
+
+    .transport {
+        gap: 0.5rem;
+    }
+
+    .main-content {
+        gap: 1.5rem;
+    }
+
+    .sidebar .section {
+        flex: 1 1 100%;
+    }
+
+    .grid-wrapper {
+        min-height: 320px;
+    }
+
+    .loop-slider-container {
+        padding-bottom: 0.75rem;
+    }
+}
+
+@media (max-width: 540px) {
+    body {
+        font-size: 0.95rem;
+    }
+
+    .header h1 {
+        padding: 0.5rem 1rem;
+        font-size: 1rem;
+    }
+
+    .transport span {
+        display: none;
+    }
+
+    input[type="number"] {
+        width: 70px;
+    }
 }
