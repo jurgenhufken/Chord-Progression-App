@@ -115,6 +115,7 @@ class ChordProgressionApp {
         this.notePreviewEnabled = true;
         this.loopStart = 1;
         this.loopEnd = 4;
+        this.maxLoopBars = 8;
         
         // Edit mode state
         this.editMode = false;
@@ -377,6 +378,8 @@ class ChordProgressionApp {
 
         let dragging = null;
 
+        const MAX_LOOP_BARS = this.maxLoopBars || 8;
+
         const getBarWidth = () => {
             if (this.barWidth && this.barWidth > 0) return this.barWidth;
             const cssWidth = getComputedStyle(document.documentElement).getPropertyValue('--bar-width');
@@ -389,21 +392,16 @@ class ChordProgressionApp {
 
             const rawStart = Number.isFinite(this.loopStart) ? Math.floor(this.loopStart) : 1;
             const rawEnd = Number.isFinite(this.loopEnd) ? Math.floor(this.loopEnd) : rawStart;
-            const desiredLength = Math.max(1, rawEnd - rawStart + 1);
 
-            let start = Math.max(1, Math.min(rawStart, totalBars));
-            let end = Math.max(start, Math.min(rawEnd, totalBars));
+            let start = Math.min(rawStart, rawEnd);
+            let end = Math.max(rawStart, rawEnd);
+
+            let desiredLength = Math.max(1, end - start + 1);
+            desiredLength = Math.min(MAX_LOOP_BARS, desiredLength);
 
             const maxStart = Math.max(1, totalBars - desiredLength + 1);
-            if (start > maxStart) {
-                start = maxStart;
-                end = Math.min(totalBars, start + desiredLength - 1);
-            } else {
-                const actualLength = end - start + 1;
-                if (actualLength < desiredLength) {
-                    end = Math.min(totalBars, start + desiredLength - 1);
-                }
-            }
+            start = Math.max(1, Math.min(start, maxStart));
+            end = Math.min(totalBars, start + desiredLength - 1);
 
             this.loopStart = start;
             this.loopEnd = end;
@@ -533,14 +531,16 @@ class ChordProgressionApp {
 
             if (dragging === 'start') {
                 const barIndex = Math.floor(relativeX / barWidth);
-                const newStart = Math.max(1, Math.min(this.loopEnd, barIndex + 1));
+                const minStart = Math.max(1, this.loopEnd - MAX_LOOP_BARS + 1);
+                const newStart = Math.max(minStart, Math.min(this.loopEnd, barIndex + 1));
                 if (newStart !== this.loopStart) {
                     this.loopStart = newStart;
                     updateSlider();
                 }
             } else if (dragging === 'end') {
                 const barIndex = Math.floor(relativeX / barWidth);
-                const newEnd = Math.max(this.loopStart, Math.min(totalBars, barIndex + 1));
+                const maxEnd = Math.min(totalBars, this.loopStart + MAX_LOOP_BARS - 1);
+                const newEnd = Math.max(this.loopStart, Math.min(maxEnd, barIndex + 1));
                 if (newEnd !== this.loopEnd) {
                     this.loopEnd = newEnd;
                     updateSlider();
@@ -549,7 +549,8 @@ class ChordProgressionApp {
                 const deltaX = clientX - this.dragStartX;
                 const deltaBars = Math.round(deltaX / barWidth);
                 if (deltaBars !== 0) {
-                    const rangeSize = this.dragStartLoopEnd - this.dragStartLoopStart;
+                    let rangeSize = Math.max(0, this.dragStartLoopEnd - this.dragStartLoopStart);
+                    rangeSize = Math.min(rangeSize, MAX_LOOP_BARS - 1);
                     const maxStart = Math.max(1, totalBars - rangeSize);
                     const desiredStart = this.dragStartLoopStart + deltaBars;
                     const newStart = Math.max(1, Math.min(maxStart, desiredStart));
@@ -1445,11 +1446,19 @@ class ChordProgressionApp {
                 const loopEndInput = document.getElementById('loopEnd');
                 if (loopEndInput) loopEndInput.value = this.loopEnd;
             }
+            const maxLength = (this.maxLoopBars || 8) - 1;
+            if (this.loopEnd - this.loopStart > maxLength) {
+                this.loopEnd = this.loopStart + maxLength;
+            }
             if (this.updateLoopSlider) this.updateLoopSlider();
         });
         document.getElementById('loopEnd')?.addEventListener('change', (e) => {
             this.loopEnd = Math.max(this.loopStart, parseInt(e.target.value));
             if (Number.isNaN(this.loopEnd)) this.loopEnd = this.loopStart;
+            const maxEnd = this.loopStart + (this.maxLoopBars || 8) - 1;
+            if (this.loopEnd > maxEnd) {
+                this.loopEnd = Math.min(maxEnd, this.progression.length || this.loopEnd);
+            }
             if (this.updateLoopSlider) this.updateLoopSlider();
         });
         
