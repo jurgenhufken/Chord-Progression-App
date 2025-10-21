@@ -252,8 +252,8 @@ input[type="range"] {
     background: transparent;
     padding: 0.5rem 0;
     margin-bottom: 0.5rem;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    padding-left: var(--label-width);
+    overflow: visible;
 }
 
 .loop-slider-track {
@@ -262,7 +262,6 @@ input[type="range"] {
     background: transparent;
     width: fit-content;
     border-top: 1px solid #333;
-    margin-left: var(--label-width);
     min-width: 0;
 }
 

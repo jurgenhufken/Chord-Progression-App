@@ -9,10 +9,7 @@ class ChordProgressionApp {
         this.currentBar = 0;
         this.bpm = 120;
         this.loopEnabled = true; // Default ON
-        this.loopSliderTotalWidth = 0;
-        this.loopSliderScrollLinked = false;
-        this.syncingSliderScroll = false;
-        this.syncingGridScroll = false;
+        this.suppressLoopSliderUpdate = false;
         
         // Modulation system
         this.modulation = {
@@ -371,14 +368,13 @@ class ChordProgressionApp {
         const range = document.getElementById('loopSliderRange');
         const handleStart = document.getElementById('loopHandleStart');
         const handleEnd = document.getElementById('loopHandleEnd');
-        const container = track ? track.parentElement : null;
-        const gridWrapper = document.querySelector('.grid-wrapper');
+        const labelsContainer = document.getElementById('loopSliderLabels');
 
-        if (!track || !range || !container) return;
+        if (!track || !range) return;
 
         let dragging = null;
 
-        const MAX_LOOP_BARS = this.maxLoopBars || 8;
+        const MAX_LOOP_BARS = Math.max(1, this.maxLoopBars || 8);
 
         const getBarWidth = () => {
             if (this.barWidth && this.barWidth > 0) return this.barWidth;
@@ -390,50 +386,39 @@ class ChordProgressionApp {
         const clampLoopBounds = (totalBars) => {
             if (totalBars <= 0) return;
 
-            const rawStart = Number.isFinite(this.loopStart) ? Math.floor(this.loopStart) : 1;
-            const rawEnd = Number.isFinite(this.loopEnd) ? Math.floor(this.loopEnd) : rawStart;
+            let start = Number.isFinite(this.loopStart) ? Math.floor(this.loopStart) : 1;
+            let end = Number.isFinite(this.loopEnd) ? Math.floor(this.loopEnd) : start;
 
-            let start = Math.min(rawStart, rawEnd);
-            let end = Math.max(rawStart, rawEnd);
+            if (start < 1) start = 1;
+            if (end < start) end = start;
+            if (end > totalBars) end = totalBars;
 
-            let desiredLength = Math.max(1, end - start + 1);
-            desiredLength = Math.min(MAX_LOOP_BARS, desiredLength);
+            const maxLength = Math.min(MAX_LOOP_BARS, totalBars);
+            if (end - start + 1 > maxLength) {
+                end = start + maxLength - 1;
+            }
 
-            const maxStart = Math.max(1, totalBars - desiredLength + 1);
-            start = Math.max(1, Math.min(start, maxStart));
-            end = Math.min(totalBars, start + desiredLength - 1);
+            if (end > totalBars) {
+                end = totalBars;
+                start = Math.max(1, end - maxLength + 1);
+            }
 
             this.loopStart = start;
             this.loopEnd = end;
-        };
-
-        const autoScrollWhileDragging = (clientX) => {
-            if (!dragging || !container) return;
-            const parentRect = container.getBoundingClientRect();
-            const threshold = 32;
-            if (clientX > parentRect.right - threshold) {
-                const delta = container.clientWidth * 0.15;
-                container.scrollLeft = Math.min(container.scrollWidth - container.clientWidth, container.scrollLeft + delta);
-            } else if (clientX < parentRect.left + threshold) {
-                const delta = container.clientWidth * 0.15;
-                container.scrollLeft = Math.max(0, container.scrollLeft - delta);
-            }
         };
 
         const updateSlider = () => {
             const totalBars = this.progression.length || 0;
 
             if (totalBars === 0) {
-                this.loopSliderTotalWidth = 0;
                 range.style.left = '0px';
                 range.style.width = '0px';
                 track.style.width = '0px';
                 track.style.minWidth = '0px';
-                const labels = document.getElementById('loopSliderLabels');
-                if (labels) {
-                    labels.innerHTML = '';
-                    labels.style.width = '0px';
-                    labels.style.minWidth = '0px';
+                if (labelsContainer) {
+                    labelsContainer.innerHTML = '';
+                    labelsContainer.style.width = '0px';
+                    labelsContainer.style.minWidth = '0px';
                 }
                 return;
             }
@@ -442,25 +427,24 @@ class ChordProgressionApp {
 
             const barWidth = getBarWidth();
             const gridWidth = Math.max(barWidth, totalBars * barWidth);
-            this.loopSliderTotalWidth = gridWidth;
 
             track.style.width = gridWidth + 'px';
             track.style.minWidth = gridWidth + 'px';
 
             const barsSelected = Math.max(1, this.loopEnd - this.loopStart + 1);
             const startPos = (this.loopStart - 1) * barWidth;
+
             range.style.left = startPos + 'px';
             range.style.width = (barsSelected * barWidth) + 'px';
 
-            const labels = document.getElementById('loopSliderLabels');
-            if (labels) {
-                labels.innerHTML = '';
-                labels.style.width = gridWidth + 'px';
-                labels.style.minWidth = gridWidth + 'px';
+            if (labelsContainer) {
+                labelsContainer.innerHTML = '';
+                labelsContainer.style.width = gridWidth + 'px';
+                labelsContainer.style.minWidth = gridWidth + 'px';
                 for (let i = 1; i <= totalBars; i++) {
                     const label = document.createElement('span');
                     label.textContent = i;
-                    labels.appendChild(label);
+                    labelsContainer.appendChild(label);
                 }
             }
 
@@ -472,17 +456,6 @@ class ChordProgressionApp {
             this.suppressLoopSliderUpdate = true;
             this.buildGrid();
             this.suppressLoopSliderUpdate = false;
-
-            if (gridWrapper && !this.syncingSliderScroll) {
-                const targetScroll = gridWrapper.scrollLeft;
-                if (Math.abs(container.scrollLeft - targetScroll) > 1) {
-                    this.syncingGridScroll = true;
-                    container.scrollLeft = targetScroll;
-                    requestAnimationFrame(() => {
-                        this.syncingGridScroll = false;
-                    });
-                }
-            }
         };
 
         const beginDrag = (type, startX) => {
@@ -516,36 +489,13 @@ class ChordProgressionApp {
         const handlePointerMove = (clientX) => {
             if (!dragging) return;
 
-            autoScrollWhileDragging(clientX);
-
             const barWidth = getBarWidth();
             if (barWidth <= 0) return;
 
-            const totalBars = this.progression.length;
+            const totalBars = this.progression.length || 0;
             if (!totalBars) return;
 
-            const trackRect = track.getBoundingClientRect();
-            const totalWidth = this.loopSliderTotalWidth || (totalBars * barWidth);
-            const scrollOffset = container ? container.scrollLeft : 0;
-            const relativeX = Math.max(0, Math.min(clientX - trackRect.left + scrollOffset, totalWidth));
-
-            if (dragging === 'start') {
-                const barIndex = Math.floor(relativeX / barWidth);
-                const minStart = Math.max(1, this.loopEnd - MAX_LOOP_BARS + 1);
-                const newStart = Math.max(minStart, Math.min(this.loopEnd, barIndex + 1));
-                if (newStart !== this.loopStart) {
-                    this.loopStart = newStart;
-                    updateSlider();
-                }
-            } else if (dragging === 'end') {
-                const barIndex = Math.floor(relativeX / barWidth);
-                const maxEnd = Math.min(totalBars, this.loopStart + MAX_LOOP_BARS - 1);
-                const newEnd = Math.max(this.loopStart, Math.min(maxEnd, barIndex + 1));
-                if (newEnd !== this.loopEnd) {
-                    this.loopEnd = newEnd;
-                    updateSlider();
-                }
-            } else if (dragging === 'range') {
+            if (dragging === 'range') {
                 const deltaX = clientX - this.dragStartX;
                 const deltaBars = Math.round(deltaX / barWidth);
                 if (deltaBars !== 0) {
@@ -554,17 +504,35 @@ class ChordProgressionApp {
                     const maxStart = Math.max(1, totalBars - rangeSize);
                     const desiredStart = this.dragStartLoopStart + deltaBars;
                     const newStart = Math.max(1, Math.min(maxStart, desiredStart));
-                    if (newStart !== this.loopStart) {
+                    const newEnd = Math.min(totalBars, newStart + rangeSize);
+                    if (newStart !== this.loopStart || newEnd !== this.loopEnd) {
                         this.loopStart = newStart;
-                        this.loopEnd = Math.min(totalBars, newStart + rangeSize);
+                        this.loopEnd = newEnd;
                         updateSlider();
                     }
                 }
+                return;
             }
-        };
 
-        const pointerMove = (clientX) => {
-            handlePointerMove(clientX);
+            const rect = track.getBoundingClientRect();
+            const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+            const barIndex = Math.floor(relativeX / barWidth);
+
+            if (dragging === 'start') {
+                const minStart = Math.max(1, this.loopEnd - MAX_LOOP_BARS + 1);
+                const newStart = Math.max(minStart, Math.min(this.loopEnd, barIndex + 1));
+                if (newStart !== this.loopStart) {
+                    this.loopStart = newStart;
+                    updateSlider();
+                }
+            } else if (dragging === 'end') {
+                const maxEnd = Math.min(totalBars, this.loopStart + MAX_LOOP_BARS - 1);
+                const newEnd = Math.max(this.loopStart, Math.min(maxEnd, barIndex + 1));
+                if (newEnd !== this.loopEnd) {
+                    this.loopEnd = newEnd;
+                    updateSlider();
+                }
+            }
         };
 
         const stopDrag = () => {
@@ -574,44 +542,18 @@ class ChordProgressionApp {
         document.addEventListener('mousemove', (e) => {
             if (!dragging) return;
             e.preventDefault();
-            pointerMove(e.clientX);
+            handlePointerMove(e.clientX);
         });
 
         document.addEventListener('touchmove', (e) => {
             if (!dragging || e.touches.length === 0) return;
             e.preventDefault();
-            pointerMove(e.touches[0].clientX);
+            handlePointerMove(e.touches[0].clientX);
         }, { passive: false });
 
         document.addEventListener('mouseup', stopDrag);
         document.addEventListener('touchend', stopDrag);
         document.addEventListener('touchcancel', stopDrag);
-
-        if (container && gridWrapper && !this.loopSliderScrollLinked) {
-            container.addEventListener('scroll', () => {
-                if (this.syncingGridScroll) return;
-                this.syncingSliderScroll = true;
-                if (gridWrapper.scrollLeft !== container.scrollLeft) {
-                    gridWrapper.scrollLeft = container.scrollLeft;
-                }
-                requestAnimationFrame(() => {
-                    this.syncingSliderScroll = false;
-                });
-            });
-
-            gridWrapper.addEventListener('scroll', () => {
-                if (this.syncingSliderScroll) return;
-                this.syncingGridScroll = true;
-                if (container.scrollLeft !== gridWrapper.scrollLeft) {
-                    container.scrollLeft = gridWrapper.scrollLeft;
-                }
-                requestAnimationFrame(() => {
-                    this.syncingGridScroll = false;
-                });
-            });
-
-            this.loopSliderScrollLinked = true;
-        }
 
         updateSlider();
 
